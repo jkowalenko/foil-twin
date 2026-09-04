@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+*.local
+.vite
+tsconfig.tsbuildinfo
+node_modules/.tmp
+grok-build.log
+.wrangler
+dev.vars
