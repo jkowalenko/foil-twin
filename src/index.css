@@ -596,22 +596,23 @@ input {
 .arm-wordmark img {
   grid-area: 1 / 1;
   display: block;
-  height: 16px;
+  height: 18px;
   width: auto;
   max-width: none;
 }
 .brand-mark.md .arm-wordmark img {
-  height: 20px;
+  height: 22px;
 }
-/* Default / dark: white lettering. Light theme: navy/blue lettering. */
+/* Default / dark: white lettering. Light theme: navy/blue lettering.
+   Use display (not visibility) so the hidden asset cannot paint a plate. */
 .arm-wordmark-light {
-  visibility: hidden;
+  display: none;
 }
 :root[data-theme="light"] .arm-wordmark-dark {
-  visibility: hidden;
+  display: none;
 }
 :root[data-theme="light"] .arm-wordmark-light {
-  visibility: visible;
+  display: block;
 }
 .brand-mark-label {
   font-size: 12px;

@@ -17,13 +17,13 @@ export function BrandMark({ brand, size = "sm", withLabel = false }: Props) {
         <span className="arm-wordmark" aria-label="Armstrong">
           <img
             className="arm-wordmark-dark"
-            src="/brand/armstrong-wordmark.png"
+            src="/brand/armstrong-wordmark.png?v=3"
             alt=""
             aria-hidden="true"
           />
           <img
             className="arm-wordmark-light"
-            src="/brand/armstrong-wordmark-light.png"
+            src="/brand/armstrong-wordmark-light.png?v=3"
             alt=""
             aria-hidden="true"
           />
