@@ -2,11 +2,13 @@ import {
   catalog,
   fuseById,
   frontById,
+  mastById,
   tailById,
 } from "../data/catalog";
 import type {
   FrontWing,
   Fuselage,
+  Mast,
   Setup,
   TailRole,
   TailWing,
@@ -17,6 +19,7 @@ import {
   fuseDeltaWords,
   fuseTitle,
   frontTitle,
+  mastDeltaWords,
   otherBrand,
   spanDeltaWords,
   tailTitle,
@@ -51,6 +54,19 @@ export type FrontTwin = {
   score: number;
   why: string[];
   skipped: string[];
+};
+
+export type PartTwin<T> = {
+  part: T;
+  score: number;
+  why: string[];
+  skipped: string[];
+};
+
+export type TwinGroup = {
+  front: FrontWing;
+  best: TwinMatch;
+  variants: TwinMatch[];
 };
 
 function clamp01(n: number): number {
@@ -149,6 +165,41 @@ export function scoreTailPair(a: TailWing, b: TailWing): ComponentScore {
       { key: "area", score: area, skipped: area == null },
       { key: "span", score: span, skipped: span == null },
       { key: "aspect_ratio", score: ar, skipped: ar == null },
+    ],
+  };
+}
+
+function mastMaterialBucket(m: Mast): "alloy" | "carbon" | "motor" {
+  if (m.motorIntegrated) return "motor";
+  const c = (m.construction ?? "").toLowerCase();
+  if (c.includes("aluminium") || c.includes("aluminum") || c.includes("alloy")) return "alloy";
+  return "carbon";
+}
+
+export function scoreMastPair(a: Mast, b: Mast): ComponentScore {
+  const length =
+    a.length_mm != null && b.length_mm != null
+      ? absScore(a.length_mm, b.length_mm, 220)
+      : null;
+  const thick =
+    a.thickness_mm != null && b.thickness_mm != null
+      ? absScore(a.thickness_mm, b.thickness_mm, 8)
+      : null;
+  const ba = mastMaterialBucket(a);
+  const bb = mastMaterialBucket(b);
+  const material =
+    ba === bb ? 1 : ba === "motor" || bb === "motor" ? 0.28 : 0.42;
+  const { score } = weighted([
+    { w: 0.72, s: length },
+    { w: 0.18, s: material },
+    { w: 0.1, s: thick },
+  ]);
+  return {
+    score,
+    parts: [
+      { key: "length", score: length, skipped: length == null },
+      { key: "material", score: material, skipped: false },
+      { key: "thickness", score: thick, skipped: thick == null },
     ],
   };
 }
@@ -334,6 +385,124 @@ export function rankFrontTwins(from: FrontWing, limit = 6): FrontTwin[] {
   }
   ranked.sort((a, b) => b.score - a.score);
   return ranked.slice(0, limit);
+}
+
+export function rankTailTwins(from: TailWing, limit = 4): PartTwin<TailWing>[] {
+  const others = catalog.tails.filter((t) => t.brand !== from.brand);
+  const ranked: PartTwin<TailWing>[] = [];
+  for (const t of others) {
+    const s = scoreTailPair(from, t);
+    if (s.score == null) continue;
+    ranked.push({
+      part: t,
+      score: s.score * 100,
+      why: whyTail(from, t),
+      skipped: s.parts.filter((p) => p.skipped).map((p) => p.key),
+    });
+  }
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked.slice(0, limit);
+}
+
+export function rankFuseTwins(from: Fuselage, limit = 3): PartTwin<Fuselage>[] {
+  const others = catalog.fuselages.filter((f) => f.brand !== from.brand);
+  const ranked: PartTwin<Fuselage>[] = [];
+  for (const f of others) {
+    const s = scoreFusePair(from, f);
+    if (s.score == null) continue;
+    ranked.push({
+      part: f,
+      score: s.score * 100,
+      why: whyFuse(from, f),
+      skipped: s.parts.filter((p) => p.skipped).map((p) => p.key),
+    });
+  }
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked.slice(0, limit);
+}
+
+function whyMast(a: Mast, b: Mast): string[] {
+  const bits: string[] = [];
+  const len = mastDeltaWords(a.length_mm, b.length_mm);
+  if (len) bits.push(len);
+  const ba = mastMaterialBucket(a);
+  const bb = mastMaterialBucket(b);
+  if (ba === "motor" || bb === "motor") {
+    bits.push(
+      "one of these is motor-integrated — length can look close while the ride is a different product",
+    );
+  } else if (ba !== bb) {
+    bits.push("alloy vs carbon — similar height, different flex and drag");
+  } else if (ba === "carbon") {
+    bits.push("both carbon; section and modulus still differ by family");
+  } else {
+    bits.push("both alloy masts");
+  }
+  if (a.thickness_mm != null && b.thickness_mm != null) {
+    const d = b.thickness_mm - a.thickness_mm;
+    if (Math.abs(d) >= 1.5) {
+      bits.push(d < 0 ? "thinner published section" : "thicker published section");
+    }
+  }
+  return bits;
+}
+
+export function rankMastTwins(from: Mast, limit = 4): PartTwin<Mast>[] {
+  const others = catalog.masts.filter((m) => m.brand !== from.brand);
+  const ranked: PartTwin<Mast>[] = [];
+  for (const m of others) {
+    const s = scoreMastPair(from, m);
+    if (s.score == null) continue;
+    ranked.push({
+      part: m,
+      score: s.score * 100,
+      why: whyMast(from, m),
+      skipped: s.parts.filter((p) => p.skipped).map((p) => p.key),
+    });
+  }
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked.slice(0, limit);
+}
+
+/** Collapse noisy complete-setup lists: one row per front, best fuse/tail first. */
+export function groupTwinsByFront(matches: TwinMatch[]): TwinGroup[] {
+  const byFront = new Map<string, TwinMatch[]>();
+  for (const m of matches) {
+    const list = byFront.get(m.front.id) ?? [];
+    list.push(m);
+    byFront.set(m.front.id, list);
+  }
+  const groups: TwinGroup[] = [];
+  for (const list of byFront.values()) {
+    list.sort((a, b) => b.total - a.total);
+    groups.push({ front: list[0].front, best: list[0], variants: list.slice(1, 4) });
+  }
+  groups.sort((a, b) => b.best.total - a.best.total);
+  return groups;
+}
+
+export function nearestFront(fromId: string): FrontWing | null {
+  const f = frontById(fromId);
+  if (!f) return null;
+  return rankFrontTwins(f, 1)[0]?.front ?? null;
+}
+
+export function nearestTail(fromId: string): TailWing | null {
+  const t = tailById(fromId);
+  if (!t) return null;
+  return rankTailTwins(t, 1)[0]?.part ?? null;
+}
+
+export function nearestFuse(fromId: string): Fuselage | null {
+  const f = fuseById(fromId);
+  if (!f) return null;
+  return rankFuseTwins(f, 1)[0]?.part ?? null;
+}
+
+export function nearestMast(fromId: string): Mast | null {
+  const m = mastById(fromId);
+  if (!m) return null;
+  return rankMastTwins(m, 1)[0]?.part ?? null;
 }
 
 export function describeTwin(m: TwinMatch): string {

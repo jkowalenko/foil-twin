@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
+import { BrandMark } from "./components/BrandMark";
 import { MapView } from "./components/MapView";
 import { ProgressView } from "./components/ProgressView";
+import { QuiverView } from "./components/QuiverView";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { TwinView } from "./components/TwinView";
 import { catalog, fusesByBrand } from "./data/catalog";
+import { SETUP_STORAGE_KEY } from "./data/labels";
 import type { Discipline, FrontWing, Goal, RiderLevel, Setup } from "./data/types";
+import { applyTheme, readTheme, type Theme } from "./lib/theme";
 
-type View = "map" | "twin" | "progress";
+type View = "map" | "twin" | "progress" | "quiver";
 
 function viewFromHash(): View {
   const h = window.location.hash.replace("#", "");
-  if (h === "map" || h === "twin" || h === "progress") return h;
+  if (h === "map" || h === "twin" || h === "progress" || h === "quiver") return h;
   return "twin";
 }
 
@@ -20,11 +25,9 @@ const DEFAULT: Setup = {
   tailId: "axis-skinny-360-45",
 };
 
-const KEY = "foil-twin-v1";
-
 function loadSetup(): Setup {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(SETUP_STORAGE_KEY);
     if (!raw) return DEFAULT;
     const parsed = JSON.parse(raw) as Setup;
     const ok =
@@ -44,9 +47,14 @@ export default function App() {
   const [level, setLevel] = useState<RiderLevel>("comfortable");
   const [discipline, setDiscipline] = useState<Discipline>("wing");
   const [goal, setGoal] = useState<Goal>("more-speed");
+  const [theme, setTheme] = useState<Theme>(() => readTheme());
 
   useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(setup));
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(SETUP_STORAGE_KEY, JSON.stringify(setup));
   }, [setup]);
 
   useEffect(() => {
@@ -81,31 +89,46 @@ export default function App() {
           <div className="wordmark">
             <span className="axis">Foil</span> <span className="arm">Twin</span>
           </div>
-          <div className="tag">Axis ↔ Armstrong setup matcher</div>
+          <div className="tag-row">
+            <BrandMark brand="axis" size="sm" />
+            <span className="tag">↔</span>
+            <BrandMark brand="armstrong" size="sm" />
+            <span className="tag">setup matcher</span>
+          </div>
         </div>
-        <nav className="nav" aria-label="Primary">
-          <button
-            type="button"
-            className={view === "map" ? "active" : ""}
-            onClick={() => go("map")}
-          >
-            Map
-          </button>
-          <button
-            type="button"
-            className={view === "twin" ? "active" : ""}
-            onClick={() => go("twin")}
-          >
-            Twin
-          </button>
-          <button
-            type="button"
-            className={view === "progress" ? "active" : ""}
-            onClick={() => go("progress")}
-          >
-            Progress
-          </button>
-        </nav>
+        <div className="top-right">
+          <nav className="nav" aria-label="Primary">
+            <button
+              type="button"
+              className={view === "map" ? "active" : ""}
+              onClick={() => go("map")}
+            >
+              Map
+            </button>
+            <button
+              type="button"
+              className={view === "twin" ? "active" : ""}
+              onClick={() => go("twin")}
+            >
+              Twin
+            </button>
+            <button
+              type="button"
+              className={view === "progress" ? "active" : ""}
+              onClick={() => go("progress")}
+            >
+              Progress
+            </button>
+            <button
+              type="button"
+              className={view === "quiver" ? "active" : ""}
+              onClick={() => go("quiver")}
+            >
+              Quiver
+            </button>
+          </nav>
+          <ThemeToggle theme={theme} onChange={setTheme} />
+        </div>
       </header>
 
       <main className="stage">
@@ -132,11 +155,13 @@ export default function App() {
             onGoal={setGoal}
           />
         )}
+        {view === "quiver" && <QuiverView onAdopt={setSetup} />}
       </main>
 
       <footer className="disclaimer">
         <span>
-          Specs from Axis and Armstrong product pages, retrieved {catalog.retrieved}.
+          Specs from Axis and Armstrong product pages. Wings/fuses {catalog.retrieved}; masts{" "}
+          {catalog.mastRetrieved}.
           Feel still varies by mast, board, rider weight, and conditions. Null
           numbers are unpublished — matching skips them instead of guessing.
         </span>

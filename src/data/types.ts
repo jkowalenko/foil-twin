@@ -83,11 +83,49 @@ export type Fuselage = {
   sources: Source[];
 };
 
+export type MastFamilyId =
+  | "axis-al-19"
+  | "axis-pc"
+  | "axis-pc-hm"
+  | "axis-fatty"
+  | "axis-pro-uhm"
+  | "axis-kaiwi"
+  | "axis-fd-hm"
+  | "axis-fd-uhm"
+  | "arm-alloy"
+  | "arm-carbon-mk2"
+  | "arm-perf-mk2"
+  | "arm-perf-x"
+  | "arm-fd-assist"
+  | "arm-fd-efoil";
+
+export type Mast = {
+  id: string;
+  brand: Brand;
+  kind: "mast";
+  familyId: MastFamilyId;
+  familyOfficial: string;
+  sizeLabel: string;
+  length_mm: number | null;
+  /** Section thickness if a single published number exists. */
+  thickness_mm: number | null;
+  chord_mm: number | null;
+  rake_deg: number | null;
+  weight_g: number | null;
+  construction: string | null;
+  /** True when the mast is a Foil Drive / motor-integrated product. */
+  motorIntegrated: boolean;
+  notes: string[];
+  sources: Source[];
+};
+
 export type Catalog = {
   retrieved: string;
+  mastRetrieved: string;
   fronts: FrontWing[];
   tails: TailWing[];
   fuselages: Fuselage[];
+  masts: Mast[];
 };
 
 export type Setup = {
@@ -95,6 +133,38 @@ export type Setup = {
   frontId: string;
   fuseId: string;
   tailId: string;
+};
+
+/** Named complete quiver setup. Brand-consistent. */
+export type NamedSetup = {
+  id: string;
+  label: string;
+  brand: Brand;
+  mastId: string;
+  fuseId: string;
+  frontId: string;
+  tailId: string;
+};
+
+/**
+ * Browser-only quiver document.
+ * localStorage key: `foil-twin-quiver-v1`
+ * `owner` is reserved for a future cloud login (null while local-only).
+ */
+export type QuiverDoc = {
+  version: 1;
+  owner: null;
+  updated: string;
+  parts: {
+    mastIds: string[];
+    fuseIds: string[];
+    frontIds: string[];
+    tailIds: string[];
+  };
+  setups: NamedSetup[];
+  disciplines: Discipline[];
+  level: RiderLevel | null;
+  goal: Goal | null;
 };
 
 export type RiderLevel = "learning" | "comfortable" | "pushing";

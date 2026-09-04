@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Setup } from "../data/types";
 import { frontById } from "../data/catalog";
 import { brandName, otherBrand, setupLabel } from "../lib/format";
-import { rankTwins, resolveSetup } from "../lib/match";
+import { groupTwinsByFront, rankTwins, resolveSetup } from "../lib/match";
+import { BrandMark } from "./BrandMark";
 import { SetupBuilder } from "./SetupBuilder";
 import { SpecStack } from "./SpecStack";
 import { TwinCard } from "./TwinCard";
@@ -15,19 +16,27 @@ type Props = {
 
 export function TwinView({ setup, onChange, onAdopt }: Props) {
   const resolved = resolveSetup(setup);
-  const twins = useMemo(() => rankTwins(setup, 8), [setup]);
-  const [picked, setPicked] = useState(0);
+  const twins = useMemo(() => rankTwins(setup, 48), [setup]);
+  const groups = useMemo(() => groupTwinsByFront(twins).slice(0, 8), [twins]);
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
   useEffect(() => {
-    setPicked(0);
+    setPickedKey(null);
   }, [setup.frontId, setup.fuseId, setup.tailId]);
-  const active = twins[picked] ?? twins[0];
+  const flat = groups.flatMap((g) => [g.best, ...g.variants]);
+  const active =
+    flat.find(
+      (t) => `${t.front.id}|${t.fuse.id}|${t.tail.id}` === pickedKey,
+    ) ?? groups[0]?.best;
 
   return (
     <div className="grid-2">
       <div className="panel">
         <div className="panel-h">
           <div>
-            <h2>Your {brandName(setup.brand)} setup</h2>
+            <h2 className="h-with-logo">
+              <BrandMark brand={setup.brand} size="sm" />
+              Your {brandName(setup.brand)} setup
+            </h2>
             <div className="sub">{setupLabel(setup)}</div>
           </div>
         </div>
@@ -46,22 +55,55 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
       <div className="panel">
         <div className="panel-h">
           <div>
-            <h2>{brandName(otherBrand(setup.brand))} twins</h2>
+            <h2 className="h-with-logo">
+              <BrandMark brand={otherBrand(setup.brand)} size="sm" />
+              {brandName(otherBrand(setup.brand))} twins
+            </h2>
             <div className="sub">
-              Ranked complete setups. Score is 62% front / 23% tail / 15% fuse.
+              Grouped by front wing. Score is 62% front / 23% tail / 15% fuse.
             </div>
           </div>
         </div>
         <div className="panel-b twin-list">
-          {twins.map((t, i) => (
-            <TwinCard
-              key={`${t.front.id}-${t.fuse.id}-${t.tail.id}`}
-              match={t}
-              rank={i + 1}
-              selected={active?.front.id === t.front.id && active.fuse.id === t.fuse.id && active.tail.id === t.tail.id}
-              onSelect={() => setPicked(i)}
-            />
-          ))}
+          {groups.map((g, i) => {
+            const shown =
+              active && active.front.id === g.front.id ? active : g.best;
+            const key = `${shown.front.id}|${shown.fuse.id}|${shown.tail.id}`;
+            const selected = active?.front.id === g.front.id;
+            return (
+              <div key={g.front.id} className="twin-group">
+                <TwinCard
+                  match={shown}
+                  rank={i + 1}
+                  selected={selected}
+                  onSelect={() => setPickedKey(key)}
+                />
+                {g.variants.length > 0 && (
+                  <div className="twin-variants">
+                    <span className="twin-variants-label">Other fuse / tail on this front</span>
+                    {g.variants.map((v) => {
+                      const vk = `${v.front.id}|${v.fuse.id}|${v.tail.id}`;
+                      const on =
+                        active?.front.id === v.front.id &&
+                        active.fuse.id === v.fuse.id &&
+                        active.tail.id === v.tail.id;
+                      return (
+                        <button
+                          key={vk}
+                          type="button"
+                          className={`chip${on ? " on" : ""}`}
+                          onClick={() => setPickedKey(vk)}
+                        >
+                          {v.fuse.sizeLabel} · {v.tail.familyOfficial} {v.tail.sizeLabel} ·{" "}
+                          {Math.round(v.total)}%
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {active && (
             <button
               type="button"

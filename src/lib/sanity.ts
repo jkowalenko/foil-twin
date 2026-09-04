@@ -1,5 +1,5 @@
 import { catalog } from "../data/catalog";
-import { rankFrontTwins, rankTwins } from "./match";
+import { rankFrontTwins, rankMastTwins, rankTwins } from "./match";
 import { describeTwin } from "./match";
 import { nextSetups } from "./progression";
 import type { Setup } from "../data/types";
@@ -17,13 +17,24 @@ function section(title: string) {
 section("Catalog counts");
 const axisF = catalog.fronts.filter((f) => f.brand === "axis");
 const armF = catalog.fronts.filter((f) => f.brand === "armstrong");
+const axisM = catalog.masts.filter((m) => m.brand === "axis");
+const armM = catalog.masts.filter((m) => m.brand === "armstrong");
 console.log(
-  `Fronts Axis ${axisF.length} / Armstrong ${armF.length}; tails ${catalog.tails.length}; fuses ${catalog.fuselages.length}`,
+  `Fronts Axis ${axisF.length} / Armstrong ${armF.length}; tails ${catalog.tails.length}; fuses ${catalog.fuselages.length}; masts Axis ${axisM.length} / Armstrong ${armM.length}`,
 );
 for (const brand of ["axis", "armstrong"] as const) {
   const fams = [...new Set(catalog.fronts.filter((f) => f.brand === brand).map((f) => f.familyOfficial))];
   console.log(`  ${brand} families: ${fams.join(", ")}`);
+  const mf = [...new Set(catalog.masts.filter((m) => m.brand === brand).map((m) => m.familyOfficial))];
+  console.log(`  ${brand} masts: ${mf.join(", ")}`);
 }
+const missingSrc = catalog.masts.filter((m) => !m.sources.length);
+const missingLen = catalog.masts.filter((m) => m.length_mm == null);
+console.log(
+  `Masts without sources: ${missingSrc.length}; masts without length: ${missingLen.length}; mast retrieved ${catalog.mastRetrieved}`,
+);
+const armWeighted = catalog.masts.filter((m) => m.brand === "armstrong" && m.weight_g != null);
+console.log(`Armstrong masts with published weight: ${armWeighted.length}/${armM.length}`);
 
 const cases: { name: string; s: Setup }[] = [
   {
@@ -92,7 +103,17 @@ const recs = nextSetups(
   "wing",
   "more-speed",
 );
+console.log(`count=${recs.length} (expect 3)`);
 for (const r of recs) {
   console.log(`- ${r.headline} [${r.jump}]`);
   if (r.otherBrandTwin) console.log(`  twin: ${describeTwin(r.otherBrandTwin)}`);
+}
+
+section("Mast twins (length)");
+for (const id of ["axis-al19-750", "axis-pro-800", "arm-pmk2-795", "arm-alloy-72"]) {
+  const m = catalog.masts.find((x) => x.id === id)!;
+  const twins = rankMastTwins(m, 2);
+  console.log(
+    `${m.familyOfficial} ${m.sizeLabel} → ${twins.map((t) => `${t.part.familyOfficial} ${t.part.sizeLabel} ${Math.round(t.score)}%`).join(" · ")}`,
+  );
 }

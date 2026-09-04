@@ -22,9 +22,16 @@ No login, no backend, no deploy. Catalog lives in `src/data/catalog.ts`.
 
 ## Views
 
-- **Map** — every v1 front wing on area (log) vs aspect ratio or span. Color by family. Click a wing to highlight nearest other-brand fronts and open **part compare**.
-- **Twin** — build a complete setup, see the spec stack, and rank other-brand equivalents (front + fuse + tail) with a plain-language why.
-- **Progress** — current setup + rider level + discipline + goal → 1–3 next setups on the **same brand**, plus the closest other-brand twin of the top pick.
+Hash routes: `#twin` `#map` `#progress` `#quiver`.
+
+- **Map** — every v1 front wing on area (log) vs aspect ratio or span. Color by family. Hover a point for name + area/span/AR. Pick a wing from the top-right menu or click a point; both drive **part compare**.
+- **Twin** — build a complete setup, see the spec stack, and rank other-brand equivalents (front + fuse + tail) with a plain-language why. Results are grouped by front wing; fuse/tail variants sit under the best complete setup.
+- **Progress** — current setup + rider level + discipline + goal → **3** next setups on the **same brand** as a carousel (best first). The other-brand twin is for the **active** slide.
+- **Quiver** — browser-only inventory (masts, fuses, fronts, tails) plus named complete setups. Multi-discipline gap check, same-brand buy suggestions, and a brand-convert map (unique other-brand parts + overlap savings).
+
+Theme defaults to **dark**. The header toggle persists `foil-twin-theme` in localStorage (`dark` | `light`).
+
+Axis and Armstrong marks in the header / Twin / Map / Quiver are the official wordmarks copied from the manufacturer sites for identification. See [SOURCES.md](./SOURCES.md).
 
 ## Catalog (v1)
 
@@ -38,9 +45,13 @@ No login, no backend, no deploy. Catalog lives in `src/data/catalog.ts`.
 
 **Armstrong tails:** Speed (180), Dart (120 / 140), Surf Mk II (130 / 170 / 200).
 
-**Armstrong fuselages:** Titanium Core A+ **TC60** (600 mm) and **TC50** (500 mm). TC70 exists on the official page but is out of v1 scope.
+**Armstrong fuselages:** Titanium Core A+ **TC60** (600 mm) and **TC50** (500 mm). TC70 exists on the official page but is out of Twin v1 scope.
 
-Sources and retrieval date: [SOURCES.md](./SOURCES.md). Pairing sanity check: [MATCH_NOTES.md](./MATCH_NOTES.md).
+**Masts (v2, retrieved 2026-09-04):** every live product on the official Axis and Armstrong mast collections. Axis: 19mm aluminium (7 lengths), Power Carbon, Power Carbon High Modulus, FATTY, PRO UHM, KAIWI, Foil Drive HM/UHM 800. Armstrong: Alloy 58/72/85 cm, Mk II Carbon, Performance Mk II, Performance-X, Foil Drive Assist + E-Foil integrated. Weight / thickness / chord only where the manufacturer printed them. 16mm Axis aluminium is mentioned in collection copy but had no live product pages on retrieval, so it is not in the catalog.
+
+Masts are used in **Quiver** (inventory, named setups, convert, buy recs). Twin fuselage matching is unchanged (length only).
+
+Sources and retrieval dates: [SOURCES.md](./SOURCES.md). Pairing sanity check: [MATCH_NOTES.md](./MATCH_NOTES.md). Status: [STATUS_V2.md](./STATUS_V2.md).
 
 ## How matching works
 
@@ -91,6 +102,38 @@ Rules of thumb:
 - Smaller tail → looser yaw
 
 Learning stays on one size step. Pushing may skip a size. A **big** jump is flagged when area changes by more than ~22%.
+
+## Quiver storage
+
+No auth, no backend. The quiver document lives in `localStorage` under **`foil-twin-quiver-v1`**.
+
+```ts
+{
+  version: 1,
+  owner: null,          // reserved for a future cloud login
+  updated: string,      // ISO timestamp
+  parts: {
+    mastIds: string[],
+    fuseIds: string[],
+    frontIds: string[],
+    tailIds: string[],
+  },
+  setups: Array<{
+    id: string;
+    label: string;
+    brand: "axis" | "armstrong";
+    mastId: string;
+    fuseId: string;
+    frontId: string;
+    tailId: string;     // brand-consistent
+  }>,
+  disciplines: Array<"wing" | "surf" | "downwind" | "wake" | "race">,
+  level: "learning" | "comfortable" | "pushing" | null,
+  goal: "more-speed" | "more-lift" | "tighter-turns" | "more-glide" | "smaller-size" | null,
+}
+```
+
+Unknown catalog ids are dropped on load. Other keys: `foil-twin-v1` (Twin/Progress current setup), `foil-twin-theme`.
 
 ## Disclaimer
 

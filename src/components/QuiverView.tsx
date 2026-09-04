@@ -1,0 +1,685 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  FAMILY_LABEL,
+  FRONT_FAMILY_ORDER,
+  MAST_FAMILY_LABEL,
+  MAST_FAMILY_ORDER,
+  TAIL_FAMILY_ORDER,
+  catalog,
+} from "../data/catalog";
+import { DISCIPLINES, GOALS, LEVELS, QUIVER_STORAGE_KEY } from "../data/labels";
+import type {
+  Brand,
+  Discipline,
+  Goal,
+  NamedSetup,
+  QuiverDoc,
+  RiderLevel,
+  Setup,
+} from "../data/types";
+import { brandName, n, otherBrand } from "../lib/format";
+import {
+  analyzeGaps,
+  brandConvert,
+  loadQuiver,
+  majorityBrand,
+  newNamedSetup,
+  recommendBuys,
+  saveQuiver,
+  toggleId,
+} from "../lib/quiver";
+import { BrandMark } from "./BrandMark";
+
+type Props = {
+  onAdopt: (s: Setup) => void;
+};
+
+export function QuiverView({ onAdopt }: Props) {
+  const [doc, setDoc] = useState<QuiverDoc>(() => loadQuiver());
+  const [draft, setDraft] = useState<Omit<NamedSetup, "id">>(() => emptyDraft("axis"));
+
+  useEffect(() => {
+    saveQuiver(doc);
+  }, [doc]);
+
+  const gaps = useMemo(() => analyzeGaps(doc), [doc]);
+  const recs = useMemo(() => recommendBuys(doc), [doc]);
+  const convert = useMemo(() => brandConvert(doc), [doc]);
+  const home = majorityBrand(doc);
+
+  function patch(next: Partial<QuiverDoc> | ((d: QuiverDoc) => QuiverDoc)) {
+    setDoc((d) => (typeof next === "function" ? next(d) : { ...d, ...next }));
+  }
+
+  function togglePart(kind: "frontIds" | "tailIds" | "fuseIds" | "mastIds", id: string) {
+    patch((d) => ({
+      ...d,
+      parts: { ...d.parts, [kind]: toggleId(d.parts[kind], id) },
+    }));
+  }
+
+  function addSetup() {
+    const mast = catalog.masts.find((m) => m.id === draft.mastId);
+    const fuse = catalog.fuselages.find((f) => f.id === draft.fuseId);
+    const front = catalog.fronts.find((f) => f.id === draft.frontId);
+    const tail = catalog.tails.find((t) => t.id === draft.tailId);
+    if (!mast || !fuse || !front || !tail) return;
+    if (
+      mast.brand !== draft.brand ||
+      fuse.brand !== draft.brand ||
+      front.brand !== draft.brand ||
+      tail.brand !== draft.brand
+    ) {
+      return;
+    }
+    const setup = newNamedSetup({
+      ...draft,
+      label: draft.label.trim() || `${front.familyOfficial} ${front.sizeLabel}`,
+    });
+    patch((d) => ({
+      ...d,
+      setups: [...d.setups, setup],
+      parts: {
+        mastIds: d.parts.mastIds.includes(setup.mastId)
+          ? d.parts.mastIds
+          : [...d.parts.mastIds, setup.mastId],
+        fuseIds: d.parts.fuseIds.includes(setup.fuseId)
+          ? d.parts.fuseIds
+          : [...d.parts.fuseIds, setup.fuseId],
+        frontIds: d.parts.frontIds.includes(setup.frontId)
+          ? d.parts.frontIds
+          : [...d.parts.frontIds, setup.frontId],
+        tailIds: d.parts.tailIds.includes(setup.tailId)
+          ? d.parts.tailIds
+          : [...d.parts.tailIds, setup.tailId],
+      },
+    }));
+  }
+
+  return (
+    <div className="quiver-grid">
+      <div className="panel">
+        <div className="panel-h">
+          <div>
+            <h2>Your quiver</h2>
+            <div className="sub">
+              Browser only · key <code>{QUIVER_STORAGE_KEY}</code>
+            </div>
+          </div>
+        </div>
+        <div className="panel-b">
+          <p className="note">
+            Inventory plus named complete setups (mast + fuse + front + tail, one brand).
+            Nothing is uploaded. Schema version 1, <code>owner: null</code> reserved for a
+            future login.
+          </p>
+
+          <PartPicker
+            title="Front wings"
+            kind="front"
+            selected={doc.parts.frontIds}
+            onToggle={(id) => togglePart("frontIds", id)}
+          />
+          <PartPicker
+            title="Tails"
+            kind="tail"
+            selected={doc.parts.tailIds}
+            onToggle={(id) => togglePart("tailIds", id)}
+          />
+          <PartPicker
+            title="Fuselages"
+            kind="fuse"
+            selected={doc.parts.fuseIds}
+            onToggle={(id) => togglePart("fuseIds", id)}
+          />
+          <PartPicker
+            title="Masts"
+            kind="mast"
+            selected={doc.parts.mastIds}
+            onToggle={(id) => togglePart("mastIds", id)}
+          />
+
+          <h3 className="quiver-h">Named setups</h3>
+          {doc.setups.length === 0 && <p className="note">No named setups yet.</p>}
+          <ul className="setup-list">
+            {doc.setups.map((s) => (
+              <li key={s.id} className="setup-row">
+                <BrandMark brand={s.brand} size="sm" />
+                <div>
+                  <strong>{s.label}</strong>
+                  <div className="sub">
+                    {catalog.masts.find((m) => m.id === s.mastId)?.sizeLabel} ·{" "}
+                    {catalog.fuselages.find((f) => f.id === s.fuseId)?.sizeLabel} ·{" "}
+                    {catalog.fronts.find((f) => f.id === s.frontId)?.familyOfficial}{" "}
+                    {catalog.fronts.find((f) => f.id === s.frontId)?.sizeLabel} ·{" "}
+                    {catalog.tails.find((t) => t.id === s.tailId)?.familyOfficial}{" "}
+                    {catalog.tails.find((t) => t.id === s.tailId)?.sizeLabel}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="chip on"
+                  onClick={() =>
+                    onAdopt({
+                      brand: s.brand,
+                      frontId: s.frontId,
+                      fuseId: s.fuseId,
+                      tailId: s.tailId,
+                    })
+                  }
+                >
+                  Load in Twin
+                </button>
+                <button
+                  type="button"
+                  className="chip"
+                  onClick={() =>
+                    patch((d) => ({ ...d, setups: d.setups.filter((x) => x.id !== s.id) }))
+                  }
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <h3 className="quiver-h">Add a setup</h3>
+          <SetupDraft draft={draft} onChange={setDraft} onAdd={addSetup} />
+
+          <h3 className="quiver-h">Disciplines</h3>
+          <div className="chips">
+            {DISCIPLINES.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                className={`chip${doc.disciplines.includes(d.id) ? " on" : ""}`}
+                onClick={() =>
+                  patch((q) => ({
+                    ...q,
+                    disciplines: toggleDisc(q.disciplines, d.id),
+                  }))
+                }
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <div className="field">
+            <label>Level (optional, for buy recs)</label>
+            <div className="chips">
+              {LEVELS.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  className={`chip${doc.level === l.id ? " on" : ""}`}
+                  onClick={() => patch({ level: l.id as RiderLevel })}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label>Goal (optional)</label>
+            <div className="chips">
+              {GOALS.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  className={`chip${doc.goal === g.id ? " on" : ""}`}
+                  onClick={() => patch({ goal: g.id as Goal })}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="quiver-right">
+        <div className="panel">
+          <div className="panel-h">
+            <div>
+              <h2>Gaps</h2>
+              <div className="sub">What this quiver still lacks for the disciplines you ticked</div>
+            </div>
+          </div>
+          <div className="panel-b">
+            {gaps.map((g) => (
+              <div key={g.discipline} className="gap-block">
+                <h3>{DISCIPLINES.find((d) => d.id === g.discipline)?.label}</h3>
+                {g.missing.length === 0 ? (
+                  <p className="note ok-note">Looks covered with what you already own.</p>
+                ) : (
+                  <ul className="why">
+                    {g.missing.map((m) => (
+                      <li key={m}>{m}</li>
+                    ))}
+                  </ul>
+                )}
+                {g.have.length > 0 && (
+                  <p className="note">{g.have.join(" · ")}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-h">
+            <div>
+              <h2 className="h-with-logo">
+                <BrandMark brand={home} size="sm" />
+                Next to buy
+              </h2>
+              <div className="sub">Same-brand first ({brandName(home)} majority of this quiver)</div>
+            </div>
+          </div>
+          <div className="panel-b">
+            {recs.length === 0 && (
+              <p className="note">Add owned parts and a discipline to get buy suggestions.</p>
+            )}
+            <div className="twin-list">
+              {recs.map((r) => (
+                <div key={r.partId} className="buy-rec">
+                  <div className="twin-top">
+                    <strong>
+                      {r.kind} · {r.title}
+                    </strong>
+                    <BrandMark brand={r.brand} size="sm" />
+                  </div>
+                  <p className="note" style={{ marginTop: 6 }}>
+                    {r.why}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-h">
+            <div>
+              <h2 className="h-with-logo">
+                <BrandMark brand={otherBrand(home)} size="sm" />
+                Brand convert
+              </h2>
+              <div className="sub">
+                Every owned part → nearest {brandName(otherBrand(home))} twin. Unique count, not a shopping list of duplicates.
+              </div>
+            </div>
+          </div>
+          <div className="panel-b">
+            {!convert && <p className="note">Own at least one part to map the other brand.</p>}
+            {convert && (
+              <>
+                <p className="convert-headline">{convert.headline}.</p>
+                <div className="pills">
+                  <span className="pill">
+                    Fronts {convert.ownedCounts.fronts} → {convert.uniqueNeeded.fronts} unique
+                    {convert.overlap.fronts ? ` · save ${convert.overlap.fronts}` : ""}
+                  </span>
+                  <span className="pill">
+                    Tails {convert.ownedCounts.tails} → {convert.uniqueNeeded.tails} unique
+                    {convert.overlap.tails ? ` · save ${convert.overlap.tails}` : ""}
+                  </span>
+                  <span className="pill">
+                    Fuses {convert.ownedCounts.fuses} → {convert.uniqueNeeded.fuses} unique
+                    {convert.overlap.fuses ? ` · save ${convert.overlap.fuses}` : ""}
+                  </span>
+                  <span className="pill">
+                    Masts {convert.ownedCounts.masts} → {convert.uniqueNeeded.masts} unique
+                    {convert.overlap.masts ? ` · save ${convert.overlap.masts}` : ""}
+                  </span>
+                  <span className="pill">
+                    {convert.uniqueNeeded.total} unique {brandName(convert.to)} parts to cover this quiver
+                  </span>
+                </div>
+                <table className="convert-table">
+                  <thead>
+                    <tr>
+                      <th>You own ({brandName(convert.from)})</th>
+                      <th>Nearest {brandName(convert.to)}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {convert.rows.map((r) => (
+                      <tr key={`${r.kind}-${r.ownedId}`}>
+                        <td>
+                          <span className="kind-tag">{r.kind}</span> {r.ownedTitle}
+                        </td>
+                        <td>
+                          {r.twinTitle ?? "—"}
+                          {r.score != null ? ` · ${Math.round(r.score)}%` : ""}
+                          <div className="sub">{r.why}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {convert.path.length > 0 && (
+                  <div className="convert-path">
+                    <h3>If you switched brands</h3>
+                    {convert.path.map((p) => (
+                      <div key={p.headline} className="path-card">
+                        <strong>{p.headline}</strong>
+                        <ul className="why">
+                          {p.why.map((w) => (
+                            <li key={w}>{w}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function toggleDisc(list: Discipline[], id: Discipline): Discipline[] {
+  if (list.includes(id)) {
+    const next = list.filter((x) => x !== id);
+    return next.length ? next : list;
+  }
+  return [...list, id];
+}
+
+function emptyDraft(brand: Brand): Omit<NamedSetup, "id"> {
+  const mast = catalog.masts.find((m) => m.brand === brand && !m.motorIntegrated);
+  const fuse = catalog.fuselages.find((f) => f.brand === brand);
+  const front = catalog.fronts.find((f) => f.brand === brand);
+  const tail = catalog.tails.find((t) => t.brand === brand);
+  return {
+    label: "",
+    brand,
+    mastId: mast?.id ?? "",
+    fuseId: fuse?.id ?? "",
+    frontId: front?.id ?? "",
+    tailId: tail?.id ?? "",
+  };
+}
+
+function SetupDraft({
+  draft,
+  onChange,
+  onAdd,
+}: {
+  draft: Omit<NamedSetup, "id">;
+  onChange: (d: Omit<NamedSetup, "id">) => void;
+  onAdd: () => void;
+}) {
+  const masts = catalog.masts.filter((m) => m.brand === draft.brand);
+  const fuses = catalog.fuselages.filter((f) => f.brand === draft.brand);
+  const fronts = catalog.fronts.filter((f) => f.brand === draft.brand);
+  const tails = catalog.tails.filter((t) => t.brand === draft.brand);
+
+  function setBrand(brand: Brand) {
+    onChange(emptyDraft(brand));
+  }
+
+  return (
+    <div className="setup-draft">
+      <div className="brand-toggle">
+        <button
+          type="button"
+          className={draft.brand === "axis" ? "on-axis" : ""}
+          onClick={() => setBrand("axis")}
+        >
+          <span className="v v-logo">
+            <BrandMark brand="axis" size="sm" /> Axis
+          </span>
+        </button>
+        <button
+          type="button"
+          className={draft.brand === "armstrong" ? "on-arm" : ""}
+          onClick={() => setBrand("armstrong")}
+        >
+          <span className="v v-logo">
+            <BrandMark brand="armstrong" size="sm" /> Armstrong
+          </span>
+        </button>
+      </div>
+      <div className="field">
+        <label>Label</label>
+        <input
+          value={draft.label}
+          placeholder="e.g. Daily wing"
+          onChange={(e) => onChange({ ...draft, label: e.target.value })}
+        />
+      </div>
+      <div className="field">
+        <label>Mast</label>
+        <select
+          value={draft.mastId}
+          onChange={(e) => onChange({ ...draft, mastId: e.target.value })}
+        >
+          {masts.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.familyOfficial} {m.sizeLabel}
+              {m.length_mm != null ? ` · ${m.length_mm} mm` : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label>Fuselage</label>
+        <select
+          value={draft.fuseId}
+          onChange={(e) => onChange({ ...draft, fuseId: e.target.value })}
+        >
+          {fuses.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.sizeLabel}
+              {f.fuse_length_mm != null ? ` · ${f.fuse_length_mm} mm` : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label>Front</label>
+        <select
+          value={draft.frontId}
+          onChange={(e) => onChange({ ...draft, frontId: e.target.value })}
+        >
+          {fronts.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.familyOfficial} {f.sizeLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label>Tail</label>
+        <select
+          value={draft.tailId}
+          onChange={(e) => onChange({ ...draft, tailId: e.target.value })}
+        >
+          {tails.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.familyOfficial} {t.sizeLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button type="button" className="chip on arm" onClick={onAdd}>
+        Save setup into quiver
+      </button>
+    </div>
+  );
+}
+
+function PartPicker({
+  title,
+  kind,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  kind: "front" | "tail" | "fuse" | "mast";
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [brand, setBrand] = useState<Brand>("axis");
+
+  if (kind === "front") {
+    const families = FRONT_FAMILY_ORDER.filter((id) =>
+      catalog.fronts.some((f) => f.familyId === id && f.brand === brand),
+    );
+    return (
+      <details className="picker" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+        <summary>
+          {title} <span className="sub">{selected.length} owned</span>
+        </summary>
+        <BrandMini brand={brand} onBrand={setBrand} />
+        {families.map((fid) => (
+          <div key={fid} className="picker-fam">
+            <div className="picker-fam-h">
+              <BrandMark brand={brand} size="sm" /> {FAMILY_LABEL[fid]}
+            </div>
+            <div className="chips">
+              {catalog.fronts
+                .filter((f) => f.familyId === fid && f.brand === brand)
+                .map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`chip${selected.includes(f.id) ? " on" : ""}`}
+                    onClick={() => onToggle(f.id)}
+                  >
+                    {f.sizeLabel}
+                    {f.area_cm2 != null ? ` · ${n(f.area_cm2, 0)}` : ""}
+                  </button>
+                ))}
+            </div>
+          </div>
+        ))}
+      </details>
+    );
+  }
+
+  if (kind === "tail") {
+    const families = TAIL_FAMILY_ORDER.filter((id) =>
+      catalog.tails.some((t) => t.familyId === id && t.brand === brand),
+    );
+    return (
+      <details className="picker">
+        <summary>
+          {title} <span className="sub">{selected.length} owned</span>
+        </summary>
+        <BrandMini brand={brand} onBrand={setBrand} />
+        {families.map((fid) => {
+          const sample = catalog.tails.find((t) => t.familyId === fid);
+          return (
+            <div key={fid} className="picker-fam">
+              <div className="picker-fam-h">
+                <BrandMark brand={brand} size="sm" /> {sample?.familyOfficial}
+              </div>
+              <div className="chips">
+                {catalog.tails
+                  .filter((t) => t.familyId === fid && t.brand === brand)
+                  .map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`chip${selected.includes(t.id) ? " on" : ""}`}
+                      onClick={() => onToggle(t.id)}
+                    >
+                      {t.sizeLabel}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          );
+        })}
+      </details>
+    );
+  }
+
+  if (kind === "fuse") {
+    return (
+      <details className="picker">
+        <summary>
+          {title} <span className="sub">{selected.length} owned</span>
+        </summary>
+        <BrandMini brand={brand} onBrand={setBrand} />
+        <div className="chips">
+          {catalog.fuselages
+            .filter((f) => f.brand === brand)
+            .map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className={`chip${selected.includes(f.id) ? " on" : ""}`}
+                onClick={() => onToggle(f.id)}
+              >
+                {f.sizeLabel}
+                {f.fuse_length_mm != null ? ` · ${f.fuse_length_mm} mm` : ""}
+              </button>
+            ))}
+        </div>
+      </details>
+    );
+  }
+
+  const families = MAST_FAMILY_ORDER.filter((id) =>
+    catalog.masts.some((m) => m.familyId === id && m.brand === brand),
+  );
+  return (
+    <details className="picker">
+      <summary>
+        {title} <span className="sub">{selected.length} owned</span>
+      </summary>
+      <BrandMini brand={brand} onBrand={setBrand} />
+      {families.map((fid) => (
+        <div key={fid} className="picker-fam">
+          <div className="picker-fam-h">
+            <BrandMark brand={brand} size="sm" /> {MAST_FAMILY_LABEL[fid]}
+          </div>
+          <div className="chips">
+            {catalog.masts
+              .filter((m) => m.familyId === fid && m.brand === brand)
+              .map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`chip${selected.includes(m.id) ? " on" : ""}`}
+                  onClick={() => onToggle(m.id)}
+                >
+                  {m.sizeLabel}
+                  {m.length_mm != null ? ` · ${m.length_mm} mm` : ""}
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
+    </details>
+  );
+}
+
+function BrandMini({ brand, onBrand }: { brand: Brand; onBrand: (b: Brand) => void }) {
+  return (
+    <div className="chips" style={{ margin: "8px 0" }}>
+      <button
+        type="button"
+        className={`chip${brand === "axis" ? " on" : ""}`}
+        onClick={() => onBrand("axis")}
+      >
+        <BrandMark brand="axis" size="sm" /> Axis
+      </button>
+      <button
+        type="button"
+        className={`chip${brand === "armstrong" ? " on arm" : ""}`}
+        onClick={() => onBrand("armstrong")}
+      >
+        <BrandMark brand="armstrong" size="sm" /> Armstrong
+      </button>
+    </div>
+  );
+}

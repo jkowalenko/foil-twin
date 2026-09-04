@@ -3,11 +3,14 @@ import type {
   FrontFamilyId,
   FrontWing,
   Fuselage,
+  Mast,
+  MastFamilyId,
   TailFamilyId,
   TailRole,
   TailWing,
 } from "./types";
-import { RETRIEVED, src, URLS } from "./sources";
+import { MAST_RETRIEVED, RETRIEVED, src, URLS } from "./sources";
+import { masts } from "./masts";
 
 const carbonUhm = "Ultra High Modulus carbon";
 const carbon = "Carbon";
@@ -1466,9 +1469,11 @@ const fuselages: Fuselage[] = [
 
 export const catalog: Catalog = {
   retrieved: RETRIEVED,
+  mastRetrieved: MAST_RETRIEVED,
   fronts,
   tails,
   fuselages,
+  masts,
 };
 
 export function frontById(id: string): FrontWing | undefined {
@@ -1480,6 +1485,9 @@ export function tailById(id: string): TailWing | undefined {
 export function fuseById(id: string): Fuselage | undefined {
   return catalog.fuselages.find((f) => f.id === id);
 }
+export function mastById(id: string): Mast | undefined {
+  return catalog.masts.find((m) => m.id === id);
+}
 
 export function frontsByBrand(brand: FrontWing["brand"]): FrontWing[] {
   return catalog.fronts.filter((f) => f.brand === brand);
@@ -1489,6 +1497,9 @@ export function tailsByBrand(brand: TailWing["brand"]): TailWing[] {
 }
 export function fusesByBrand(brand: Fuselage["brand"]): Fuselage[] {
   return catalog.fuselages.filter((f) => f.brand === brand);
+}
+export function mastsByBrand(brand: Mast["brand"]): Mast[] {
+  return catalog.masts.filter((m) => m.brand === brand);
 }
 
 export const FRONT_FAMILY_ORDER: FrontFamilyId[] = [
@@ -1528,4 +1539,38 @@ export const FAMILY_LABEL: Record<FrontFamilyId, string> = {
   uha: "Armstrong UHA",
   ha: "Armstrong HA",
   "ma-mk2": "Armstrong MA Mk II",
+};
+
+export const MAST_FAMILY_ORDER: MastFamilyId[] = [
+  "axis-al-19",
+  "axis-pc",
+  "axis-pc-hm",
+  "axis-fatty",
+  "axis-pro-uhm",
+  "axis-kaiwi",
+  "axis-fd-hm",
+  "axis-fd-uhm",
+  "arm-alloy",
+  "arm-carbon-mk2",
+  "arm-perf-mk2",
+  "arm-perf-x",
+  "arm-fd-assist",
+  "arm-fd-efoil",
+];
+
+export const MAST_FAMILY_LABEL: Record<MastFamilyId, string> = {
+  "axis-al-19": "Axis 19mm Aluminium",
+  "axis-pc": "Axis Power Carbon",
+  "axis-pc-hm": "Axis Power Carbon HM",
+  "axis-fatty": "Axis Power Carbon FATTY",
+  "axis-pro-uhm": "Axis PRO UHM",
+  "axis-kaiwi": "Axis KAIWI UHM",
+  "axis-fd-hm": "Axis Foil Drive HM",
+  "axis-fd-uhm": "Axis Foil Drive UHM",
+  "arm-alloy": "Armstrong Alloy",
+  "arm-carbon-mk2": "Armstrong Mk II Carbon",
+  "arm-perf-mk2": "Armstrong Performance Mk II",
+  "arm-perf-x": "Armstrong Performance-X",
+  "arm-fd-assist": "Armstrong Foil Drive Assist",
+  "arm-fd-efoil": "Armstrong Foil Drive E-Foil",
 };

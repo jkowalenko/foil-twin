@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DISCIPLINES, GOALS, LEVELS } from "../data/labels";
 import type { Discipline, Goal, RiderLevel, Setup } from "../data/types";
 import { brandName, n, otherBrand, setupLabel } from "../lib/format";
 import { resolveSetup } from "../lib/match";
 import { nextSetups } from "../lib/progression";
+import { BrandMark } from "./BrandMark";
 import { SetupBuilder } from "./SetupBuilder";
 import { TwinCard } from "./TwinCard";
 
@@ -17,28 +19,6 @@ type Props = {
   onDiscipline: (v: Discipline) => void;
   onGoal: (v: Goal) => void;
 };
-
-const LEVELS: { id: RiderLevel; label: string }[] = [
-  { id: "learning", label: "Learning" },
-  { id: "comfortable", label: "Comfortable" },
-  { id: "pushing", label: "Pushing" },
-];
-
-const DISC: { id: Discipline; label: string }[] = [
-  { id: "wing", label: "Wing" },
-  { id: "surf", label: "Surf / prone" },
-  { id: "downwind", label: "Downwind" },
-  { id: "wake", label: "Wake" },
-  { id: "race", label: "Race" },
-];
-
-const GOALS: { id: Goal; label: string }[] = [
-  { id: "more-speed", label: "More speed" },
-  { id: "more-lift", label: "More lift / low-end" },
-  { id: "tighter-turns", label: "Tighter turns" },
-  { id: "more-glide", label: "More glide" },
-  { id: "smaller-size", label: "Smaller size" },
-];
 
 export function ProgressView({
   setup,
@@ -55,7 +35,13 @@ export function ProgressView({
     () => nextSetups(setup, level, discipline, goal),
     [setup, level, discipline, goal],
   );
+  const [slide, setSlide] = useState(0);
+  useEffect(() => {
+    setSlide(0);
+  }, [setup.frontId, setup.fuseId, setup.tailId, level, discipline, goal]);
   const resolved = resolveSetup(setup);
+  const active = recs[slide] ?? recs[0];
+  const last = Math.max(recs.length - 1, 0);
 
   return (
     <div className="grid-progress">
@@ -86,7 +72,7 @@ export function ProgressView({
           <div className="field">
             <label>Discipline</label>
             <div className="chips">
-              {DISC.map((d) => (
+              {DISCIPLINES.map((d) => (
                 <button
                   key={d.id}
                   type="button"
@@ -132,28 +118,58 @@ export function ProgressView({
             </div>
           </div>
         )}
-        {recs.map((r, i) => (
-          <article className="progress-card" key={`${r.setup.frontId}-${i}`}>
+        {active && (
+          <article className="progress-card carousel">
+            <div className="carousel-nav">
+              <button
+                type="button"
+                className="chip"
+                disabled={slide <= 0}
+                onClick={() => setSlide((s) => Math.max(0, s - 1))}
+              >
+                Prev
+              </button>
+              <div className="dots" role="tablist" aria-label="Recommendations">
+                {recs.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`dot-btn${i === slide ? " on" : ""}`}
+                    aria-label={`Recommendation ${i + 1}`}
+                    onClick={() => setSlide(i)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="chip"
+                disabled={slide >= last}
+                onClick={() => setSlide((s) => Math.min(last, s + 1))}
+              >
+                Next
+              </button>
+            </div>
             <div className="twin-top">
               <h3>
-                {i + 1}. {r.headline}
+                {slide + 1} of {recs.length}. {active.headline}
               </h3>
-              <span className={`jump ${r.jump}`}>{r.jump} jump</span>
+              <span className={`jump ${active.jump}`}>{active.jump} jump</span>
             </div>
             <div className="pills">
               <span className="pill">
-                {r.front.familyOfficial} {r.front.sizeLabel} ·{" "}
-                {n(r.front.area_cm2, 0, "cm²")} · AR {n(r.front.aspect_ratio, 2)}
+                <BrandMark brand={setup.brand} size="sm" />
+                {active.front.familyOfficial} {active.front.sizeLabel} ·{" "}
+                {n(active.front.area_cm2, 0, "cm²")} · AR {n(active.front.aspect_ratio, 2)}
               </span>
               <span className="pill">
-                {r.fuse.sizeLabel} {n(r.fuse.fuse_length_mm, 0, "mm")}
+                {active.fuse.sizeLabel} {n(active.fuse.fuse_length_mm, 0, "mm")}
               </span>
               <span className="pill">
-                {r.tail.familyOfficial} {r.tail.sizeLabel}
+                {active.tail.familyOfficial} {active.tail.sizeLabel}
               </span>
             </div>
             <ul className="why">
-              {r.why.map((w) => (
+              {active.why.map((w) => (
                 <li key={w}>{w}</li>
               ))}
             </ul>
@@ -161,20 +177,21 @@ export function ProgressView({
               type="button"
               className="chip on"
               style={{ marginTop: 10 }}
-              onClick={() => onAdopt(r.setup)}
+              onClick={() => onAdopt(active.setup)}
             >
               Load this as current setup
             </button>
-            {r.otherBrandTwin && (
+            {active.otherBrandTwin && (
               <div style={{ marginTop: 14 }}>
-                <div className="sub" style={{ marginBottom: 8, color: "var(--muted)" }}>
+                <div className="sub h-with-logo" style={{ marginBottom: 8, color: "var(--muted)" }}>
+                  <BrandMark brand={otherBrand(setup.brand)} size="sm" />
                   Closest {brandName(otherBrand(setup.brand))} twin of this pick
                 </div>
-                <TwinCard match={r.otherBrandTwin} />
+                <TwinCard match={active.otherBrandTwin} />
               </div>
             )}
           </article>
-        ))}
+        )}
       </div>
     </div>
   );

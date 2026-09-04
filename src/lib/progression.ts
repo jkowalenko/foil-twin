@@ -364,8 +364,124 @@ export function nextSetups(
     return true;
   });
 
-  const limit = level === "learning" ? 2 : 3;
-  return unique.slice(0, limit).map((idea, i) => {
+  const fillers: typeof ideas = [];
+  const down = neighborByArea(src.front, "down");
+  const up = neighborByArea(src.front, "up");
+  const fuseShort = shorterFuse(src.fuse);
+  const fuseLong = longerFuse(src.fuse);
+  const tailSmall = smallerTail(src.tail);
+  const tailLarge = largerTail(src.tail);
+  if (down) {
+    fillers.push({
+      front: down,
+      fuse: src.fuse,
+      tail: src.tail,
+      headline: `Same family, one size down to ${down.sizeLabel}`,
+      why: [
+        "Smaller area → more speed, less lift. Fuse and tail stay put so the jump is mostly the front.",
+        level === "learning"
+          ? "Learning: one size is the honest step."
+          : "A clean size drop if the other ideas felt like too much at once.",
+      ],
+    });
+  }
+  if (up) {
+    fillers.push({
+      front: up,
+      fuse: src.fuse,
+      tail: src.tail,
+      headline: `Same family, one size up to ${up.sizeLabel}`,
+      why: ["More area → earlier lift, less top end. Same outline."],
+    });
+  }
+  if (fuseShort && fuseShort.id !== src.fuse.id) {
+    fillers.push({
+      front: src.front,
+      fuse: fuseShort,
+      tail: src.tail,
+      headline: `Same front, shorter fuse (${fuseShort.sizeLabel})`,
+      why: ["Shorter fuse → more maneuverable, less pitch-stable. Front stays so you feel the fuse."],
+    });
+  }
+  if (fuseLong && fuseLong.id !== src.fuse.id) {
+    fillers.push({
+      front: src.front,
+      fuse: fuseLong,
+      tail: src.tail,
+      headline: `Same front, longer fuse (${fuseLong.sizeLabel})`,
+      why: ["Longer fuse → more pitch-stable, easier pumping."],
+    });
+  }
+  if (tailSmall && tailSmall.id !== src.tail.id) {
+    fillers.push({
+      front: src.front,
+      fuse: src.fuse,
+      tail: tailSmall,
+      headline: `Same front, smaller ${tailSmall.familyOfficial} ${tailSmall.sizeLabel}`,
+      why: ["Smaller tail → looser yaw. Keep the front so the change is isolated."],
+    });
+  }
+  if (tailLarge && tailLarge.id !== src.tail.id) {
+    fillers.push({
+      front: src.front,
+      fuse: src.fuse,
+      tail: tailLarge,
+      headline: `Same front, larger ${tailLarge.familyOfficial} ${tailLarge.sizeLabel}`,
+      why: ["Larger tail → more locked yaw, a bit more drag."],
+    });
+  }
+  const otherLane = catalog.fronts
+    .filter(
+      (f) =>
+        f.brand === src.front.brand &&
+        f.familyId !== src.front.familyId &&
+        f.area_cm2 != null &&
+        src.front.area_cm2 != null,
+    )
+    .sort(
+      (a, b) =>
+        Math.abs(Math.log((a.area_cm2 ?? 1) / (src.front.area_cm2 ?? 1))) -
+        Math.abs(Math.log((b.area_cm2 ?? 1) / (src.front.area_cm2 ?? 1))),
+    )[0];
+  if (otherLane) {
+    fillers.push({
+      front: otherLane,
+      fuse: src.fuse,
+      tail: src.tail,
+      headline: `Closest other ${otherLane.familyOfficial}: ${otherLane.sizeLabel}`,
+      why: [
+        `Same-ish area in a different family (${src.front.familyOfficial} → ${otherLane.familyOfficial}).`,
+        areaNote(src.front, otherLane),
+      ],
+    });
+  }
+
+  const usedFronts = new Set(unique.map((i) => i.front.id));
+  const rest: typeof ideas = [];
+  for (const idea of fillers) {
+    const key = `${idea.front.id}|${idea.fuse.id}|${idea.tail.id}`;
+    if (key === `${src.front.id}|${src.fuse.id}|${src.tail.id}`) continue;
+    if (seen.has(key)) continue;
+    if (usedFronts.has(idea.front.id)) {
+      rest.push(idea);
+      continue;
+    }
+    seen.add(key);
+    usedFronts.add(idea.front.id);
+    unique.push(idea);
+    if (unique.length >= 3) break;
+  }
+  if (unique.length < 3) {
+    for (const idea of rest) {
+      const key = `${idea.front.id}|${idea.fuse.id}|${idea.tail.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(idea);
+      if (unique.length >= 3) break;
+    }
+  }
+
+  return unique.slice(0, 3).map((idea) => {
     const setup: Setup = {
       brand: current.brand,
       frontId: idea.front.id,
@@ -373,7 +489,7 @@ export function nextSetups(
       tailId: idea.tail.id,
     };
     const jump = jumpFromArea(areaOf(src.front.id), areaOf(idea.front.id));
-    const twin = i === 0 ? rankTwins(setup, 1)[0] ?? null : null;
+    const twin = rankTwins(setup, 1)[0] ?? null;
     const extra =
       jump === "big"
         ? ["Honest: this is a big jump. Try it in power, not on a survival day."]

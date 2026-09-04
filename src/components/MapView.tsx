@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import {
   FAMILY_COLOR,
   FAMILY_LABEL,
+  FRONT_FAMILY_ORDER,
   catalog,
   frontById,
 } from "../data/catalog";
 import type { FrontFamilyId, FrontWing } from "../data/types";
 import { n, shortFront } from "../lib/format";
 import { rankFrontTwins } from "../lib/match";
+import { BrandMark } from "./BrandMark";
 
 type YMode = "ar" | "span";
 
@@ -20,6 +22,8 @@ type Props = {
 export function MapView({ selectedId, onSelect, onUseFront }: Props) {
   const [yMode, setYMode] = useState<YMode>("ar");
   const [hidden, setHidden] = useState<Set<FrontFamilyId>>(new Set());
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
 
   const points = catalog.fronts.filter((f) => {
     if (hidden.has(f.familyId)) return false;
@@ -54,8 +58,12 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
   }, [points, yMode]);
 
   const selected = selectedId ? frontById(selectedId) : undefined;
+  const hovered = hoverId ? frontById(hoverId) : undefined;
   const twins = selected ? rankFrontTwins(selected, 5) : [];
   const twinIds = new Set(twins.map((t) => t.front.id));
+  const pickerFronts = FRONT_FAMILY_ORDER.flatMap((fid) =>
+    catalog.fronts.filter((f) => f.familyId === fid),
+  );
 
   const families = (Object.keys(FAMILY_LABEL) as FrontFamilyId[]).filter((id) =>
     catalog.fronts.some((f) => f.familyId === id),
@@ -68,26 +76,45 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
   return (
     <div className="map-wrap">
       <div className="panel map-card">
-        <div className="panel-h">
+        <div className="panel-h map-h">
           <div>
             <h2>Front map</h2>
             <div className="sub">Area (log) vs {yMode === "ar" ? "aspect ratio" : "span"}</div>
           </div>
-          <div className="toggles">
-            <button
-              type="button"
-              className={yMode === "ar" ? "on" : ""}
-              onClick={() => setYMode("ar")}
-            >
-              Area × AR
-            </button>
-            <button
-              type="button"
-              className={yMode === "span" ? "on" : ""}
-              onClick={() => setYMode("span")}
-            >
-              Area × span
-            </button>
+          <div className="map-controls">
+            <div className="field map-picker">
+              <label htmlFor="map-wing">Compare wing</label>
+              <select
+                id="map-wing"
+                value={selectedId ?? ""}
+                onChange={(e) => onSelect(e.target.value)}
+              >
+                <option value="" disabled>
+                  Select a front
+                </option>
+                {pickerFronts.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.brand === "axis" ? "Axis" : "Armstrong"} {f.familyOfficial} {f.sizeLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="toggles">
+              <button
+                type="button"
+                className={yMode === "ar" ? "on" : ""}
+                onClick={() => setYMode("ar")}
+              >
+                Area × AR
+              </button>
+              <button
+                type="button"
+                className={yMode === "span" ? "on" : ""}
+                onClick={() => setYMode("span")}
+              >
+                Area × span
+              </button>
+            </div>
           </div>
         </div>
         <svg
@@ -116,7 +143,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 <text
                   x={x}
                   y={layout.H - 16}
-                  fill="#8aa3b0"
+                  fill="var(--muted)"
                   fontSize="11"
                   textAnchor="middle"
                   fontFamily="IBM Plex Mono"
@@ -140,7 +167,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 <text
                   x={layout.padL - 8}
                   y={y + 4}
-                  fill="#8aa3b0"
+                  fill="var(--muted)"
                   fontSize="11"
                   textAnchor="end"
                   fontFamily="IBM Plex Mono"
@@ -153,7 +180,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
           <text
             x={layout.W / 2}
             y={layout.H - 4}
-            fill="#5d7582"
+            fill="var(--faint)"
             fontSize="11"
             textAnchor="middle"
           >
@@ -162,7 +189,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
           <text
             x="16"
             y={layout.H / 2}
-            fill="#5d7582"
+            fill="var(--faint)"
             fontSize="11"
             transform={`rotate(-90 16 ${layout.H / 2})`}
             textAnchor="middle"
@@ -200,6 +227,33 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 key={p.id}
                 className="dot"
                 onClick={() => onSelect(p.id)}
+                onMouseEnter={(e) => {
+                  setHoverId(p.id);
+                  const rect = (e.target as SVGElement)
+                    .closest("svg")
+                    ?.getBoundingClientRect();
+                  if (rect) {
+                    setTip({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    });
+                  }
+                }}
+                onMouseMove={(e) => {
+                  const rect = (e.target as SVGElement)
+                    .closest("svg")
+                    ?.getBoundingClientRect();
+                  if (rect) {
+                    setTip({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    });
+                  }
+                }}
+                onMouseLeave={() => {
+                  setHoverId(null);
+                  setTip(null);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onSelect(p.id);
                 }}
@@ -224,7 +278,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                   <text
                     x={cx + 12}
                     y={cy - 10}
-                    fill="#e9f4f7"
+                    fill="var(--text)"
                     fontSize="12"
                     fontFamily="Outfit"
                   >
@@ -235,7 +289,27 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
             );
           })}
         </svg>
+        {hovered && tip && (
+          <div
+            className="map-tip"
+            style={{ left: tip.x + 14, top: tip.y + 10 }}
+            role="tooltip"
+          >
+            <div className="map-tip-name">
+              <BrandMark brand={hovered.brand} size="sm" />
+              {shortFront(hovered)}
+            </div>
+            <div className="map-tip-specs">
+              {n(hovered.area_cm2, 0, "cm²")} · {n(hovered.span_mm, 0, "mm")} · AR{" "}
+              {n(hovered.aspect_ratio, 2)}
+            </div>
+          </div>
+        )}
         <div className="legend">
+          <span className="legend-brands">
+            <BrandMark brand="axis" size="sm" />
+            <BrandMark brand="armstrong" size="sm" />
+          </span>
           {families.map((id) => (
             <span
               key={id}
@@ -260,7 +334,10 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
       <div className="panel">
         <div className="panel-h">
           <div>
-            <h2>Part compare</h2>
+            <h2 className="h-with-logo">
+              {selected && <BrandMark brand={selected.brand} size="sm" />}
+              Part compare
+            </h2>
             <div className="sub">Nearest other-brand fronts</div>
           </div>
         </div>

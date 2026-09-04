@@ -1,5 +1,5 @@
-import type { Brand, FrontWing, Fuselage, Setup, TailWing } from "../data/types";
-import { fuseById, frontById, tailById } from "../data/catalog";
+import type { Brand, FrontWing, Fuselage, Mast, Setup, TailWing } from "../data/types";
+import { fuseById, frontById, mastById, tailById } from "../data/catalog";
 
 export function n(value: number | null | undefined, digits = 0, unit = ""): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -28,6 +28,31 @@ export function tailTitle(t: TailWing): string {
 
 export function fuseTitle(f: Fuselage): string {
   return `${brandName(f.brand)} ${f.sizeLabel}`;
+}
+
+export function mastTitle(m: Mast): string {
+  return `${brandName(m.brand)} ${m.familyOfficial} ${m.sizeLabel}`;
+}
+
+export function shortMast(m: Mast): string {
+  return `${m.familyOfficial} ${m.sizeLabel}`;
+}
+
+export function partByIdTitle(kind: "front" | "tail" | "fuse" | "mast", id: string): string {
+  if (kind === "front") {
+    const f = frontById(id);
+    return f ? frontTitle(f) : id;
+  }
+  if (kind === "tail") {
+    const t = tailById(id);
+    return t ? tailTitle(t) : id;
+  }
+  if (kind === "fuse") {
+    const f = fuseById(id);
+    return f ? fuseTitle(f) : id;
+  }
+  const m = mastById(id);
+  return m ? mastTitle(m) : id;
 }
 
 export function setupLabel(s: Setup): string {
@@ -86,4 +111,14 @@ export function fuseDeltaWords(from: number | null, to: number | null): string |
   if (d > -25) return "similar overall fuse length";
   if (d > -80) return "a slightly shorter fuse so looser";
   return "shorter fuse so looser / more pivot";
+}
+
+export function mastDeltaWords(from: number | null, to: number | null): string | null {
+  if (from == null || to == null) return null;
+  const d = to - from;
+  if (d > 120) return "noticeably taller mast";
+  if (d > 40) return "a bit taller";
+  if (d > -40) return "similar mast length";
+  if (d > -120) return "a bit shorter";
+  return "noticeably shorter mast";
 }

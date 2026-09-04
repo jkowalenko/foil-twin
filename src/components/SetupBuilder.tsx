@@ -7,6 +7,7 @@ import {
 } from "../data/catalog";
 import type { Brand, FrontFamilyId, Setup, TailFamilyId } from "../data/types";
 import { brandName } from "../lib/format";
+import { BrandMark } from "./BrandMark";
 
 type Props = {
   setup: Setup;
@@ -57,7 +58,10 @@ export function SetupBuilder({ setup, onChange }: Props) {
           type="button"
         >
           <span className="k">Ride</span>
-          <span className="v">Axis</span>
+          <span className="v v-logo">
+            <BrandMark brand="axis" size="sm" />
+            Axis
+          </span>
         </button>
         <button
           className={setup.brand === "armstrong" ? "on-arm" : ""}
@@ -65,7 +69,10 @@ export function SetupBuilder({ setup, onChange }: Props) {
           type="button"
         >
           <span className="k">Ride</span>
-          <span className="v">Armstrong</span>
+          <span className="v v-logo">
+            <BrandMark brand="armstrong" size="sm" />
+            Armstrong
+          </span>
         </button>
       </div>
 
