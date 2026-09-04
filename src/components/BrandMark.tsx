@@ -14,8 +14,19 @@ export function BrandMark({ brand, size = "sm", withLabel = false }: Props) {
       {brand === "axis" ? (
         <img src="/brand/axis-logo.png" alt="AXIS" />
       ) : (
-        <span className="arm-wordmark-chip">
-          <img src="/brand/armstrong-wordmark.png" alt="Armstrong" />
+        <span className="arm-wordmark" aria-label="Armstrong">
+          <img
+            className="arm-wordmark-dark"
+            src="/brand/armstrong-wordmark.png"
+            alt=""
+            aria-hidden="true"
+          />
+          <img
+            className="arm-wordmark-light"
+            src="/brand/armstrong-wordmark-light.png"
+            alt=""
+            aria-hidden="true"
+          />
         </span>
       )}
       {withLabel && <span className="brand-mark-label">{label}</span>}

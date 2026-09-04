@@ -31,7 +31,6 @@
   --panel-bot: rgba(10, 24, 34, 0.88);
   --chip-on-bg: rgba(232, 160, 90, 0.12);
   --arm-on-bg: rgba(62, 201, 192, 0.12);
-  --wordmark-chip: #f4f7f8;
   --radius: 18px;
   --font: "Outfit", system-ui, sans-serif;
   --display: "Fraunces", Georgia, serif;
@@ -70,7 +69,6 @@
   --panel-bot: rgba(247, 250, 251, 0.94);
   --chip-on-bg: rgba(198, 120, 46, 0.12);
   --arm-on-bg: rgba(26, 158, 150, 0.12);
-  --wordmark-chip: #ffffff;
 }
 
 * {
@@ -589,22 +587,31 @@ input {
 .brand-mark-axis img {
   border-radius: 3px;
 }
-.arm-wordmark-chip {
-  display: inline-flex;
+.arm-wordmark {
+  display: inline-grid;
   align-items: center;
-  background: var(--wordmark-chip);
-  border-radius: 4px;
-  padding: 4px 8px 3px;
   line-height: 0;
   flex-shrink: 0;
 }
-.arm-wordmark-chip img {
-  height: 14px;
+.arm-wordmark img {
+  grid-area: 1 / 1;
+  display: block;
+  height: 16px;
   width: auto;
   max-width: none;
 }
-.brand-mark.md .arm-wordmark-chip img {
-  height: 16px;
+.brand-mark.md .arm-wordmark img {
+  height: 20px;
+}
+/* Default / dark: white lettering. Light theme: navy/blue lettering. */
+.arm-wordmark-light {
+  visibility: hidden;
+}
+:root[data-theme="light"] .arm-wordmark-dark {
+  visibility: hidden;
+}
+:root[data-theme="light"] .arm-wordmark-light {
+  visibility: visible;
 }
 .brand-mark-label {
   font-size: 12px;
