@@ -1522,13 +1522,15 @@ export const TAIL_FAMILY_ORDER: TailFamilyId[] = [
 ];
 
 export const FAMILY_COLOR: Record<FrontFamilyId, string> = {
-  surge: "#f0a36a",
-  "art-v2": "#e8c56b",
-  spitfire: "#ef7a6a",
-  fireball: "#c084fc",
-  uha: "#5eead4",
-  ha: "#38bdf8",
-  "ma-mk2": "#67e8f9",
+  // Axis — distinct reds (readable on dark + light)
+  surge: "#ff6b6b",
+  "art-v2": "#e63946",
+  spitfire: "#c1121f",
+  fireball: "#9b2226",
+  // Armstrong — distinct blues
+  uha: "#4cc9f0",
+  ha: "#4895ef",
+  "ma-mk2": "#3a0ca3",
 };
 
 export const FAMILY_LABEL: Record<FrontFamilyId, string> = {

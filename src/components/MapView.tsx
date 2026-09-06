@@ -68,9 +68,21 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
     catalog.fronts.filter((f) => f.familyId === fid),
   );
 
-  const families = (Object.keys(FAMILY_LABEL) as FrontFamilyId[]).filter((id) =>
+  const families = FRONT_FAMILY_ORDER.filter((id) =>
     catalog.fronts.some((f) => f.familyId === id),
   );
+  const axisFamilies = families.filter((id) =>
+    id === "surge" || id === "art-v2" || id === "spitfire" || id === "fireball",
+  );
+  const armFamilies = families.filter(
+    (id) => id === "uha" || id === "ha" || id === "ma-mk2",
+  );
+  const toggleFamily = (id: FrontFamilyId) => {
+    const next = new Set(hidden);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setHidden(next);
+  };
 
   const ticksX = [500, 700, 900, 1100, 1400];
   const ticksY =
@@ -271,8 +283,8 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                   fill={FAMILY_COLOR[p.familyId]}
                   stroke={
                     p.brand === "axis"
-                      ? "rgba(232,160,90,0.9)"
-                      : "rgba(62,201,192,0.9)"
+                      ? "rgba(230,57,70,0.9)"
+                      : "rgba(76,201,240,0.9)"
                   }
                   strokeWidth={isSel ? 2 : 1}
                   opacity={isSel || isTwin || !selected ? 1 : 0.35}
@@ -313,15 +325,25 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
             <BrandMark brand="axis" size="sm" />
             <BrandMark brand="armstrong" size="sm" />
           </span>
-          {families.map((id) => (
+          <span className="legend-group">Axis</span>
+          {axisFamilies.map((id) => (
             <span
               key={id}
-              onClick={() => {
-                const next = new Set(hidden);
-                if (next.has(id)) next.delete(id);
-                else next.add(id);
-                setHidden(next);
+              onClick={() => toggleFamily(id)}
+              style={{
+                cursor: "pointer",
+                opacity: hidden.has(id) ? 0.35 : 1,
               }}
+            >
+              <i style={{ background: FAMILY_COLOR[id] }} />
+              {FAMILY_LABEL[id]}
+            </span>
+          ))}
+          <span className="legend-group">Armstrong</span>
+          {armFamilies.map((id) => (
+            <span
+              key={id}
+              onClick={() => toggleFamily(id)}
               style={{
                 cursor: "pointer",
                 opacity: hidden.has(id) ? 0.35 : 1,
@@ -346,7 +368,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
         </div>
         <div className="panel-b compare-front">
           {!selected && (
-            <p className="note">Click a wing on the map. Axis is copper-ringed, Armstrong teal.</p>
+            <p className="note">Click a wing on the map. Axis is red-ringed, Armstrong blue.</p>
           )}
           {selected && (
             <>
