@@ -8,7 +8,7 @@ import {
 } from "../data/catalog";
 import type { FrontFamilyId, FrontWing } from "../data/types";
 import { n, shortFront } from "../lib/format";
-import { rankFrontTwins } from "../lib/match";
+import { arClass, rankFrontTwins } from "../lib/match";
 import { BrandMark } from "./BrandMark";
 
 type YMode = "ar" | "span";
@@ -59,7 +59,10 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
 
   const selected = selectedId ? frontById(selectedId) : undefined;
   const hovered = hoverId ? frontById(hoverId) : undefined;
-  const twins = selected ? rankFrontTwins(selected, 5) : [];
+  const selectedClass = selected ? arClass(selected) : null;
+  const twins = selected
+    ? rankFrontTwins(selected, 5, { sameArClass: true })
+    : [];
   const twinIds = new Set(twins.map((t) => t.front.id));
   const pickerFronts = FRONT_FAMILY_ORDER.flatMap((fid) =>
     catalog.fronts.filter((f) => f.familyId === fid),
@@ -338,7 +341,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
               {selected && <BrandMark brand={selected.brand} size="sm" />}
               Part compare
             </h2>
-            <div className="sub">Nearest other-brand fronts</div>
+            <div className="sub">Nearest other-brand fronts in the same AR class</div>
           </div>
         </div>
         <div className="panel-b compare-front">
@@ -352,7 +355,17 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 <span className="pill">{n(selected.area_cm2, 0, "cm²")}</span>
                 <span className="pill">{n(selected.span_mm, 0, "mm")}</span>
                 <span className="pill">AR {n(selected.aspect_ratio, 2)}</span>
+                {selectedClass && (
+                  <span className="pill">{selectedClass} AR class</span>
+                )}
               </div>
+              {twins.length === 0 && (
+                <p className="note">
+                  {selectedClass == null
+                    ? "No published aspect ratio, so this wing is not paired across AR classes."
+                    : `No other-brand fronts in the ${selectedClass} AR class.`}
+                </p>
+              )}
               {twins.map((t) => (
                 <button
                   type="button"

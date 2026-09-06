@@ -3,12 +3,14 @@ import { GOALS } from "../data/labels";
 import type { Goal, Setup } from "../data/types";
 import { frontTitle } from "./format";
 import {
-  MIN_COMPLETE_TWIN,
+  MIN_FRONT_TWIN,
+  arClass,
   describeTwin,
   rankFrontTwins,
   rankMastTwins,
   rankTwins,
   resolveSetup,
+  sameArClass,
 } from "./match";
 import { isStrictForward, nextSetups } from "./progression";
 import { FRONT_OVERLAP_MIN, brandConvert } from "./quiver";
@@ -189,13 +191,82 @@ if (strictFail) {
   throw new Error(`Progression strict-forward failed ${strictFail} check(s)`);
 }
 
-section(`Twin page floor (${MIN_COMPLETE_TWIN}% complete setups)`);
+section(`Twin page floor (front ≥ ${MIN_FRONT_TWIN}%)`);
+let twinFloorFail = 0;
 for (const c of cases.slice(0, 3)) {
-  const all = rankTwins(c.s, 80);
-  const kept = all.filter((t) => t.total >= MIN_COMPLETE_TWIN);
+  const all = rankTwins(c.s, 5000);
+  const kept = all.filter((t) => (t.frontScore ?? 0) >= MIN_FRONT_TWIN);
+  const gated = rankTwins(c.s, 5000, { minFrontScore: MIN_FRONT_TWIN });
+  const weakFront = gated.filter((t) => (t.frontScore ?? 0) < MIN_FRONT_TWIN);
+  if (weakFront.length) {
+    console.log(`FAIL ${c.name}: ${weakFront.length} listed with front < ${MIN_FRONT_TWIN}%`);
+    twinFloorFail += 1;
+  }
+  if (gated.length !== kept.length) {
+    console.log(
+      `FAIL ${c.name}: gated ${gated.length} vs filter ${kept.length}`,
+    );
+    twinFloorFail += 1;
+  }
+  const rankedOk = gated.every((t, i) => i === 0 || t.total <= gated[i - 1].total);
+  if (!rankedOk) {
+    console.log(`FAIL ${c.name}: Twin page results not ranked by overall score`);
+    twinFloorFail += 1;
+  }
+  const overallOnly = all.filter((t) => t.total >= MIN_FRONT_TWIN);
   console.log(
-    `${c.name}: ${kept.length}/${all.length} ≥ ${MIN_COMPLETE_TWIN}% (top ${all[0] ? Math.round(all[0].total) : "—" }%)`,
+    `${c.name}: ${kept.length}/${all.length} front ≥ ${MIN_FRONT_TWIN}% (overall-floor would keep ${overallOnly.length}; top overall ${gated[0] ? Math.round(gated[0].total) : "—"}%, front ${gated[0] ? Math.round(gated[0].frontScore ?? 0) : "—"}%)`,
   );
+}
+if (twinFloorFail) {
+  throw new Error(`Twin page front floor failed ${twinFloorFail} check(s)`);
+}
+
+section("Map AR class bands (same-class part-compare only)");
+const bandSamples: { ar: number | null; want: ReturnType<typeof arClass> }[] = [
+  { ar: null, want: null },
+  { ar: 8.99, want: "carve" },
+  { ar: 9, want: "mid" },
+  { ar: 11.49, want: "mid" },
+  { ar: 11.5, want: "high" },
+];
+let arFail = 0;
+for (const s of bandSamples) {
+  const got = arClass({ aspect_ratio: s.ar });
+  if (got !== s.want) {
+    console.log(`FAIL arClass(${s.ar}) = ${got}, expected ${s.want}`);
+    arFail += 1;
+  }
+}
+if (sameArClass({ aspect_ratio: null }, { aspect_ratio: 10 })) {
+  console.log("FAIL null AR must not pair across classes");
+  arFail += 1;
+}
+for (const f of catalog.fronts) {
+  const twins = rankFrontTwins(f, 12, { sameArClass: true });
+  for (const t of twins) {
+    if (!sameArClass(f, t.front)) {
+      console.log(`FAIL map twin ${f.id} → ${t.front.id} crosses AR class`);
+      arFail += 1;
+    }
+  }
+}
+const spit1180 = catalog.fronts.find((f) => f.id === "axis-spitfire-1180")!;
+const spitOpen = rankFrontTwins(spit1180, 8);
+const spitMap = rankFrontTwins(spit1180, 8, { sameArClass: true });
+const spitCross = spitOpen.filter((t) => !sameArClass(spit1180, t.front));
+console.log(
+  `Spitfire 1180 is ${arClass(spit1180)}; unrestricted top-8 has ${spitCross.length} other-class; map lists ${spitMap.map((t) => `${t.front.familyOfficial} ${t.front.sizeLabel}`).join(", ") || "none"}`,
+);
+if (spitMap.some((t) => arClass(t.front) !== "mid")) {
+  console.log("FAIL Spitfire 1180 map twins must stay mid AR class");
+  arFail += 1;
+}
+console.log(
+  `arClass bands ok; map same-class twins checked across ${catalog.fronts.length} fronts, fails=${arFail}`,
+);
+if (arFail) {
+  throw new Error(`Map AR class checks failed ${arFail}`);
 }
 
 section(`Quiver convert overlap collapse (≥${FRONT_OVERLAP_MIN}% same front)`);

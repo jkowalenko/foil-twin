@@ -69,8 +69,32 @@ export type TwinGroup = {
   variants: TwinMatch[];
 };
 
-/** Complete-setup twins below this overall score stay off the Twin page. */
-export const MIN_COMPLETE_TWIN = 75;
+export type ArClass = "carve" | "mid" | "high";
+
+/**
+ * Twin page lists a complete setup only if the **front wing** pair
+ * scores at least this (0–100). Overall score is still shown and used to rank.
+ */
+export const MIN_FRONT_TWIN = 75;
+
+/** carve: AR < 9; mid: 9 ≤ AR < 11.5; high: AR ≥ 11.5. Null AR has no class. */
+export function arClass(wing: { aspect_ratio: number | null }): ArClass | null {
+  const ar = wing.aspect_ratio;
+  if (ar == null) return null;
+  if (ar < 9) return "carve";
+  if (ar < 11.5) return "mid";
+  return "high";
+}
+
+/** True only when both wings have a published AR in the same band. */
+export function sameArClass(
+  a: { aspect_ratio: number | null },
+  b: { aspect_ratio: number | null },
+): boolean {
+  const left = arClass(a);
+  const right = arClass(b);
+  return left != null && left === right;
+}
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
@@ -321,7 +345,11 @@ export function resolveSetup(s: Setup): {
   return { front, fuse, tail };
 }
 
-export function rankTwins(from: Setup, limit = 8): TwinMatch[] {
+export function rankTwins(
+  from: Setup,
+  limit = 8,
+  opts?: { minFrontScore?: number },
+): TwinMatch[] {
   const src = resolveSetup(from);
   if (!src) return [];
   const brand = otherBrand(from.brand);
@@ -333,6 +361,7 @@ export function rankTwins(from: Setup, limit = 8): TwinMatch[] {
   for (const front of fronts) {
     const fs = scoreFrontPair(src.front, front);
     if (fs.score == null) continue;
+    if (opts?.minFrontScore != null && fs.score * 100 < opts.minFrontScore) continue;
     for (const fuse of fuses) {
       const us = scoreFusePair(src.fuse, fuse);
       for (const tail of tails) {
@@ -370,10 +399,15 @@ export function rankTwins(from: Setup, limit = 8): TwinMatch[] {
   return out.slice(0, limit);
 }
 
-export function rankFrontTwins(from: FrontWing, limit = 6): FrontTwin[] {
+export function rankFrontTwins(
+  from: FrontWing,
+  limit = 6,
+  opts?: { sameArClass?: boolean },
+): FrontTwin[] {
   const others = catalog.fronts.filter((f) => f.brand !== from.brand);
   const ranked: FrontTwin[] = [];
   for (const f of others) {
+    if (opts?.sameArClass && !sameArClass(from, f)) continue;
     const s = scoreFrontPair(from, f);
     if (s.score == null) continue;
     ranked.push({

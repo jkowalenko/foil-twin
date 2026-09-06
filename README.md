@@ -24,8 +24,8 @@ No login, no backend, no deploy. Catalog lives in `src/data/catalog.ts`.
 
 Hash routes: `#twin` `#map` `#progress` `#quiver`.
 
-- **Map** — every v1 front wing on area (log) vs aspect ratio or span. Color by family. Hover a point for name + area/span/AR. Pick a wing from the top-right menu or click a point; both drive **part compare**.
-- **Twin** — build a complete setup, see the spec stack, and rank other-brand **twin setups** (front + fuse + tail) with a plain-language why. Brand selectors are logos only. Only complete setups at **75% overall match or better** are listed; if none clear that bar, the right panel says so. Results are grouped by front wing; fuse/tail variants sit under the best complete setup.
+- **Map** — every v1 front wing on area (log) vs aspect ratio or span. Color by family. Hover a point for name + area/span/AR. Pick a wing from the top-right menu or click a point; both drive **part compare**. Part compare only lists nearest other-brand fronts in the **same AR class** (carve / mid / high).
+- **Twin** — build a complete setup, see the spec stack, and rank other-brand **twin setups** (front + fuse + tail) with a plain-language why. Brand selectors are logos only. Only complete setups whose **front wing** is at **75% match or better** are listed (overall score is still shown and used to rank); if none clear that bar, the right panel says so. Results are grouped by front wing; fuse/tail variants sit under the best complete setup.
 - **Progress** — current setup + rider level + discipline + goal → up to **3** next setups on the **same brand** as a carousel (best first). Recommendations must **strictly advance** the chosen goal (never a backwards move on that goal's primary axis). If fewer than 3 strict-forward options exist, fewer are shown. The other-brand twin is for the **active** slide.
 - **Quiver** — browser-only inventory (masts, fuses, fronts, tails) plus named complete setups. Multi-discipline gap check, same-brand buy suggestions, and a brand-convert map: each owned part can be included or excluded (default: all included). Unchecked items are left out of the buy list and overlap math. Checked items produce a unique other-brand buy list with overlap savings. Multiple owned fronts that map to the same other-brand front at **≥ 85% front match** are collapsed.
 
@@ -63,7 +63,19 @@ A complete-setup score is:
 | Tail | 23% | Role map + area + span + AR |
 | Fuselage | 15% | Overall length. Mast-to-front only if **both** sides publish a number (they currently do not). Tail lever is unpublished on both brands, unused in matching, and not shown in the UI. |
 
-Missing numbers are dropped and the remaining weights are renormalized. Nothing is hallucinated to fill a gap. The Twin page only lists complete setups at **75% overall or better**.
+Missing numbers are dropped and the remaining weights are renormalized. Nothing is hallucinated to fill a gap. The Twin page only lists complete setups whose **front-wing score is 75% or better**. Overall score is still shown and used to rank; fuse/tail cannot pull a weak front onto the list.
+
+### Map AR classes
+
+Part-compare / nearest-other-brand on the Map never treats wings in different aspect-ratio classes as similar, even if area or span are close. Bands use published `aspect_ratio` (`arClass()` in `src/lib/match.ts`):
+
+| Class | Aspect ratio |
+| --- | --- |
+| carve | AR < 9.0 |
+| mid | 9.0 ≤ AR < 11.5 |
+| high | AR ≥ 11.5 |
+
+A wing with unpublished AR has no class and is not paired across classes.
 
 ### Tail role map (starting heuristic)
 
