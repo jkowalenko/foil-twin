@@ -51,7 +51,6 @@ export function SpecStack({ front, fuse, tail }: Props) {
         }
         nullish={fuse.mast_forward_vs_standard_mm == null}
       />
-      <Row k="Tail lever" v={n(fuse.tail_lever_mm, 0, "mm")} nullish />
       <Row k="Weight" v={n(fuse.weight_g, 0, "g")} nullish />
       <Row k="Construction" v={fuse.construction ?? "—"} />
 

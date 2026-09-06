@@ -1,9 +1,17 @@
-import { catalog } from "../data/catalog";
-import { rankFrontTwins, rankMastTwins, rankTwins } from "./match";
-import { describeTwin } from "./match";
-import { nextSetups } from "./progression";
-import type { Setup } from "../data/types";
+import { catalog, fusesByBrand } from "../data/catalog";
+import { GOALS } from "../data/labels";
+import type { Goal, Setup } from "../data/types";
 import { frontTitle } from "./format";
+import {
+  MIN_COMPLETE_TWIN,
+  describeTwin,
+  rankFrontTwins,
+  rankMastTwins,
+  rankTwins,
+  resolveSetup,
+} from "./match";
+import { isStrictForward, nextSetups } from "./progression";
+import { FRONT_OVERLAP_MIN, brandConvert } from "./quiver";
 
 function setup(frontId: string, fuseId: string, tailId: string): Setup {
   const brand = catalog.fronts.find((f) => f.id === frontId)!.brand;
@@ -103,10 +111,140 @@ const recs = nextSetups(
   "wing",
   "more-speed",
 );
-console.log(`count=${recs.length} (expect 3)`);
+console.log(`count=${recs.length} (up to 3, strict-forward only)`);
 for (const r of recs) {
   console.log(`- ${r.headline} [${r.jump}]`);
   if (r.otherBrandTwin) console.log(`  twin: ${describeTwin(r.otherBrandTwin)}`);
+}
+
+section("Progression strict-forward (all fronts × goals)");
+let strictFail = 0;
+let strictCases = 0;
+const goals = GOALS.map((g) => g.id) as Goal[];
+for (const front of catalog.fronts) {
+  const fuse = fusesByBrand(front.brand)[0];
+  const tail = catalog.tails.find((t) => t.brand === front.brand);
+  if (!fuse || !tail) continue;
+  const s = setup(front.id, fuse.id, tail.id);
+  const src = resolveSetup(s);
+  if (!src) continue;
+  for (const goal of goals) {
+    const list = nextSetups(s, "comfortable", "wing", goal);
+    strictCases += 1;
+    if (list.length > 3) {
+      console.log(`FAIL ${front.id} ${goal}: ${list.length} recs (max 3)`);
+      strictFail += 1;
+    }
+    for (const r of list) {
+      const ok = isStrictForward(src, r, goal);
+      if (!ok) {
+        console.log(`FAIL ${front.id} ${goal}: ${r.headline}`);
+        strictFail += 1;
+      }
+      if (goal === "more-speed" || goal === "smaller-size") {
+        if (
+          src.front.area_cm2 != null &&
+          r.front.area_cm2 != null &&
+          r.front.area_cm2 > src.front.area_cm2
+        ) {
+          console.log(`FAIL larger area for ${goal}: ${front.id} → ${r.front.id}`);
+          strictFail += 1;
+        }
+      }
+      if (goal === "more-lift") {
+        if (
+          src.front.area_cm2 != null &&
+          r.front.area_cm2 != null &&
+          r.front.area_cm2 < src.front.area_cm2
+        ) {
+          console.log(`FAIL smaller area for more-lift: ${front.id} → ${r.front.id}`);
+          strictFail += 1;
+        }
+      }
+      if (goal === "tighter-turns") {
+        if (
+          src.fuse.fuse_length_mm != null &&
+          r.fuse.fuse_length_mm != null &&
+          r.fuse.fuse_length_mm > src.fuse.fuse_length_mm
+        ) {
+          console.log(`FAIL longer fuse for tighter-turns: ${front.id} → ${r.fuse.id}`);
+          strictFail += 1;
+        }
+      }
+      if (goal === "more-glide") {
+        if (
+          src.front.aspect_ratio != null &&
+          r.front.aspect_ratio != null &&
+          r.front.aspect_ratio < src.front.aspect_ratio
+        ) {
+          console.log(`FAIL lower AR for more-glide: ${front.id} → ${r.front.id}`);
+          strictFail += 1;
+        }
+      }
+    }
+  }
+}
+console.log(`checked ${strictCases} setup×goal cases, fails=${strictFail}`);
+if (strictFail) {
+  throw new Error(`Progression strict-forward failed ${strictFail} check(s)`);
+}
+
+section(`Twin page floor (${MIN_COMPLETE_TWIN}% complete setups)`);
+for (const c of cases.slice(0, 3)) {
+  const all = rankTwins(c.s, 80);
+  const kept = all.filter((t) => t.total >= MIN_COMPLETE_TWIN);
+  console.log(
+    `${c.name}: ${kept.length}/${all.length} ≥ ${MIN_COMPLETE_TWIN}% (top ${all[0] ? Math.round(all[0].total) : "—" }%)`,
+  );
+}
+
+section(`Quiver convert overlap collapse (≥${FRONT_OVERLAP_MIN}% same front)`);
+const convert = brandConvert({
+  version: 1,
+  owner: null,
+  updated: new Date().toISOString(),
+  parts: {
+    mastIds: [],
+    fuseIds: [],
+    frontIds: ["axis-artv2-879", "axis-surge-890", "axis-artv2-939"],
+    tailIds: [],
+  },
+  setups: [],
+  disciplines: ["wing"],
+  level: "comfortable",
+  goal: "more-speed",
+});
+if (convert) {
+  console.log(
+    `buyList=${convert.buyList.length} unique fronts=${convert.uniqueNeeded.fronts} overlaps=${convert.frontOverlaps.length} saved=${convert.overlapSaved}`,
+  );
+  for (const g of convert.frontOverlaps) {
+    console.log(
+      `  ${g.twinTitle} covers ${g.owned.map((o) => `${o.title} ${Math.round(o.score)}%`).join(" + ")} save ${g.save}`,
+    );
+  }
+  if (convert.frontOverlaps.length < 1 || convert.uniqueNeeded.fronts !== 2) {
+    throw new Error("Expected 85% front overlap to collapse three owned fronts into two unique buys");
+  }
+  const none = brandConvert(
+    {
+      version: 1,
+      owner: null,
+      updated: new Date().toISOString(),
+      parts: {
+        mastIds: [],
+        fuseIds: [],
+        frontIds: ["axis-artv2-879", "axis-artv2-819"],
+        tailIds: [],
+      },
+      setups: [],
+      disciplines: ["wing"],
+      level: "comfortable",
+      goal: "more-speed",
+    },
+    { frontIds: [], tailIds: [], fuseIds: [], mastIds: [] },
+  );
+  console.log(`unchecked all: buyList=${none?.buyList.length ?? 0} rows=${none?.rows.length ?? 0}`);
 }
 
 section("Mast twins (length)");

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Setup } from "../data/types";
 import { frontById } from "../data/catalog";
 import { brandName, otherBrand, setupLabel } from "../lib/format";
-import { groupTwinsByFront, rankTwins, resolveSetup } from "../lib/match";
+import { MIN_COMPLETE_TWIN, groupTwinsByFront, rankTwins, resolveSetup } from "../lib/match";
 import { BrandMark } from "./BrandMark";
 import { SetupBuilder } from "./SetupBuilder";
 import { SpecStack } from "./SpecStack";
@@ -16,7 +16,10 @@ type Props = {
 
 export function TwinView({ setup, onChange, onAdopt }: Props) {
   const resolved = resolveSetup(setup);
-  const twins = useMemo(() => rankTwins(setup, 48), [setup]);
+  const twins = useMemo(
+    () => rankTwins(setup, 120).filter((t) => t.total >= MIN_COMPLETE_TWIN),
+    [setup],
+  );
   const groups = useMemo(() => groupTwinsByFront(twins).slice(0, 8), [twins]);
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   useEffect(() => {
@@ -57,14 +60,23 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
           <div>
             <h2 className="h-with-logo">
               <BrandMark brand={otherBrand(setup.brand)} size="sm" />
-              {brandName(otherBrand(setup.brand))} twins
+              {brandName(otherBrand(setup.brand))} twin setups
             </h2>
             <div className="sub">
-              Grouped by front wing. Score is 62% front / 23% tail / 15% fuse.
+              Complete setups at {MIN_COMPLETE_TWIN}% overall or better. Grouped by
+              front wing. Score is 62% front / 23% tail / 15% fuse.
             </div>
           </div>
         </div>
         <div className="panel-b twin-list">
+          {groups.length === 0 && (
+            <div className="empty-state">
+              No complete {brandName(otherBrand(setup.brand))} twin setups at{" "}
+              {MIN_COMPLETE_TWIN}% overall match or better. The matcher only lists
+              front + fuse + tail combinations that clear that bar — weaker
+              overall matches stay hidden instead of being dressed up as twins.
+            </div>
+          )}
           {groups.map((g, i) => {
             const shown =
               active && active.front.id === g.front.id ? active : g.best;
@@ -118,8 +130,7 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
               Front {frontById(twins[0].front.id)?.familyOfficial} is the closest
               other-brand wing by published area / span / AR. Tail role mapping:
               Skinny ≈ Speed, Progressive ≈ Dart, Skinny Surf ≈ Surf. Fuse
-              matching is overall length only — Axis and Armstrong do not both
-              publish tail lever.
+              matching is overall length only.
             </p>
           )}
         </div>

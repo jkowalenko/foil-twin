@@ -51,28 +51,26 @@ export function SetupBuilder({ setup, onChange }: Props) {
 
   return (
     <div>
-      <div className="brand-toggle">
+      <div className="brand-toggle logos-only">
         <button
           className={setup.brand === "axis" ? "on-axis" : ""}
           onClick={() => setBrand("axis")}
           type="button"
+          aria-label="Axis"
+          aria-pressed={setup.brand === "axis"}
+          title="Axis"
         >
-          <span className="k">Ride</span>
-          <span className="v v-logo">
-            <BrandMark brand="axis" size="sm" />
-            Axis
-          </span>
+          <BrandMark brand="axis" size="md" />
         </button>
         <button
           className={setup.brand === "armstrong" ? "on-arm" : ""}
           onClick={() => setBrand("armstrong")}
           type="button"
+          aria-label="Armstrong"
+          aria-pressed={setup.brand === "armstrong"}
+          title="Armstrong"
         >
-          <span className="k">Ride</span>
-          <span className="v v-logo">
-            <BrandMark brand="armstrong" size="sm" />
-            Armstrong
-          </span>
+          <BrandMark brand="armstrong" size="md" />
         </button>
       </div>
 

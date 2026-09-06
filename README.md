@@ -25,9 +25,9 @@ No login, no backend, no deploy. Catalog lives in `src/data/catalog.ts`.
 Hash routes: `#twin` `#map` `#progress` `#quiver`.
 
 - **Map** — every v1 front wing on area (log) vs aspect ratio or span. Color by family. Hover a point for name + area/span/AR. Pick a wing from the top-right menu or click a point; both drive **part compare**.
-- **Twin** — build a complete setup, see the spec stack, and rank other-brand equivalents (front + fuse + tail) with a plain-language why. Results are grouped by front wing; fuse/tail variants sit under the best complete setup.
-- **Progress** — current setup + rider level + discipline + goal → **3** next setups on the **same brand** as a carousel (best first). The other-brand twin is for the **active** slide.
-- **Quiver** — browser-only inventory (masts, fuses, fronts, tails) plus named complete setups. Multi-discipline gap check, same-brand buy suggestions, and a brand-convert map (unique other-brand parts + overlap savings).
+- **Twin** — build a complete setup, see the spec stack, and rank other-brand **twin setups** (front + fuse + tail) with a plain-language why. Brand selectors are logos only. Only complete setups at **75% overall match or better** are listed; if none clear that bar, the right panel says so. Results are grouped by front wing; fuse/tail variants sit under the best complete setup.
+- **Progress** — current setup + rider level + discipline + goal → up to **3** next setups on the **same brand** as a carousel (best first). Recommendations must **strictly advance** the chosen goal (never a backwards move on that goal's primary axis). If fewer than 3 strict-forward options exist, fewer are shown. The other-brand twin is for the **active** slide.
+- **Quiver** — browser-only inventory (masts, fuses, fronts, tails) plus named complete setups. Multi-discipline gap check, same-brand buy suggestions, and a brand-convert map: each owned part can be included or excluded (default: all included). Unchecked items are left out of the buy list and overlap math. Checked items produce a unique other-brand buy list with overlap savings. Multiple owned fronts that map to the same other-brand front at **≥ 85% front match** are collapsed.
 
 Theme defaults to **dark**. The header toggle persists `foil-twin-theme` in localStorage (`dark` | `light`).
 
@@ -61,9 +61,9 @@ A complete-setup score is:
 | --- | --- | --- |
 | Front | 62% | Area on a **log** scale, span, aspect ratio |
 | Tail | 23% | Role map + area + span + AR |
-| Fuselage | 15% | Overall length. Tail lever / mast-to-front only if **both** sides publish a number (they currently do not). |
+| Fuselage | 15% | Overall length. Mast-to-front only if **both** sides publish a number (they currently do not). Tail lever is unpublished on both brands, unused in matching, and not shown in the UI. |
 
-Missing numbers are dropped and the remaining weights are renormalized. Nothing is hallucinated to fill a gap.
+Missing numbers are dropped and the remaining weights are renormalized. Nothing is hallucinated to fill a gap. The Twin page only lists complete setups at **75% overall or better**.
 
 ### Tail role map (starting heuristic)
 
@@ -100,6 +100,16 @@ Rules of thumb:
 - Higher AR → more glide, less roll
 - Shorter fuse → more maneuverable, less stable
 - Smaller tail → looser yaw
+
+Recommendations are **strict-forward** on the chosen goal. They never recommend a setup that goes backwards on that goal's primary axis:
+
+- **More speed** — smaller front area and/or a clearly higher-speed family; never larger area
+- **More lift / low-end** — larger front area; never smaller
+- **Tighter turns** — shorter fuse and/or lower AR / more carve-oriented family; never a longer fuse
+- **More glide** — higher aspect ratio and/or a higher-AR family; never lower AR
+- **Smaller size** — smaller front area; never larger
+
+Up to 3, best first. If fewer strict-forward options exist, the carousel is shorter — it does not pad with backwards moves.
 
 Learning stays on one size step. Pushing may skip a size. A **big** jump is flagged when area changes by more than ~22%.
 

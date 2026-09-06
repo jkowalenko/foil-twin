@@ -33,12 +33,13 @@ Scores are 0–100. Front is 62% of a complete-setup score, tail 23%, fuse 15%. 
 
 ### Progression sample
 
-ART v2 879, comfortable, wing, more speed:
+ART v2 879, comfortable, wing, more speed — **strict-forward** only (never larger area). Up to 3; fewer if nothing else advances the goal.
 
 1. Drop to ART v2 **819** — flagged **big** (~18% less area, 790 → 647 cm²). Twin: HA 680 + TC60 + Speed 180.
-2. Move into **Fireball 940** — medium AR jump into the glide family.
+2. Move into **Fireball 880** (604 cm², AR 12.82) — higher-speed family, smaller area.
+3. Move into **Fireball 940** (689 cm², AR 12.84) — same family step, still smaller than 790 cm².
 
-That is the intended honesty: 879 → 819 is a real size skip in feel even though it is the next ART v2.
+A Fireball with *more* area than 790 cm² is not recommended for this goal. 879 → 819 is a real size skip in feel even though it is the next ART v2. Recommendations are not padded with backwards moves.
 
 ## Parts we could not source (null in the catalog)
 

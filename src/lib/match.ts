@@ -69,6 +69,9 @@ export type TwinGroup = {
   variants: TwinMatch[];
 };
 
+/** Complete-setup twins below this overall score stay off the Twin page. */
+export const MIN_COMPLETE_TWIN = 75;
+
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
@@ -292,16 +295,13 @@ function whyFuse(a: Fuselage, b: Fuselage): string[] {
   if (len) bits.push(len);
   if (a.brand === "axis" && b.brand === "armstrong") {
     bits.push(
-      "Axis Advance+ parks the mast 60 mm further forward than Axis Standard, so the same overall length has more tail lever — a 600 mm Crazy Short is not a 1:1 600 mm TC60 in pitch feel",
+      "Axis Advance+ parks the mast 60 mm further forward than Axis Standard, so the same overall length has more fuselage behind the mast — a 600 mm Crazy Short is not a 1:1 600 mm TC60 in pitch feel",
     );
   }
   if (a.brand === "armstrong" && b.brand === "axis") {
     bits.push(
       "Axis Advance+ mast sits 60 mm further forward than Axis Standard, so an Axis fuse of similar length will feel a bit looser in yaw/roll than a straight length match suggests",
     );
-  }
-  if (a.tail_lever_mm == null || b.tail_lever_mm == null) {
-    bits.push("tail lever mm isn't published for both — length only");
   }
   return bits;
 }

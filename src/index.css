@@ -244,6 +244,13 @@ input {
   padding: 10px 8px;
   cursor: pointer;
 }
+.brand-toggle.logos-only button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 12px 10px;
+}
 .brand-toggle button .k {
   display: block;
   font-size: 11px;
@@ -803,10 +810,90 @@ input {
   padding: 10px 12px;
   background: var(--card-inner);
 }
+.empty-state {
+  padding: 16px 8px 8px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .convert-headline {
   font-size: 15px;
   line-height: 1.45;
   margin: 0 0 10px;
+}
+.convert-include {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.convert-kind {
+  display: grid;
+  gap: 6px;
+}
+.convert-kind-h {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 560;
+}
+.convert-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.convert-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  background: var(--card-inner);
+}
+.convert-checks label.off {
+  opacity: 0.55;
+}
+.convert-checks input {
+  margin: 0;
+}
+.overlap-list {
+  margin: 12px 0 4px;
+}
+.overlap-list h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.overlap-card {
+  border: 1px solid var(--arm);
+  background: var(--arm-on-bg);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.savings,
+.save-pill {
+  color: var(--ok);
+  font-weight: 560;
+}
+.buy-list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.buy-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--card-inner);
+}
+.buy-item.overlap {
+  border-color: var(--arm);
 }
 .convert-table {
   width: 100%;

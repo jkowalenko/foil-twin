@@ -436,37 +436,124 @@ export type ConvertRow = {
   why: string;
 };
 
+export type ConvertInclude = {
+  frontIds: string[];
+  tailIds: string[];
+  fuseIds: string[];
+  mastIds: string[];
+};
+
+export type FrontOverlapGroup = {
+  twinId: string;
+  twinTitle: string;
+  owned: { id: string; title: string; score: number }[];
+  save: number;
+};
+
+export type ConvertBuyItem = {
+  kind: ConvertRow["kind"];
+  twinId: string;
+  twinTitle: string;
+  covers: { ownedId: string; ownedTitle: string; score: number | null }[];
+};
+
+export type OwnedConvertPart = {
+  kind: ConvertRow["kind"];
+  id: string;
+  title: string;
+};
+
+/** Front match at or above this is collapsed when several owned fronts share a twin. */
+export const FRONT_OVERLAP_MIN = 85;
+
 export type BrandConvert = {
   from: Brand;
   to: Brand;
   rows: ConvertRow[];
+  tableRows: ConvertRow[];
   uniqueNeeded: { fronts: number; tails: number; fuses: number; masts: number; total: number };
   ownedCounts: { fronts: number; tails: number; fuses: number; masts: number };
   overlap: { fronts: number; tails: number; fuses: number; masts: number };
+  overlapSaved: number;
   headline: string;
   path: { headline: string; why: string[] }[];
+  buyList: ConvertBuyItem[];
+  frontOverlaps: FrontOverlapGroup[];
 };
 
-export function brandConvert(doc: QuiverDoc): BrandConvert | null {
-  const from = majorityBrand(doc);
-  const to = otherBrand(from);
-  const rows: ConvertRow[] = [];
-
+export function listOwnedConvertParts(doc: QuiverDoc): OwnedConvertPart[] {
+  const out: OwnedConvertPart[] = [];
   for (const id of doc.parts.frontIds) {
     const p = frontById(id);
+    if (p) out.push({ kind: "front", id, title: `${p.familyOfficial} ${p.sizeLabel}` });
+  }
+  for (const id of doc.parts.tailIds) {
+    const p = tailById(id);
+    if (p) out.push({ kind: "tail", id, title: `${p.familyOfficial} ${p.sizeLabel}` });
+  }
+  for (const id of doc.parts.fuseIds) {
+    const p = fuseById(id);
+    if (p) out.push({ kind: "fuse", id, title: p.sizeLabel });
+  }
+  for (const id of doc.parts.mastIds) {
+    const p = mastById(id);
+    if (p) out.push({ kind: "mast", id, title: `${p.familyOfficial} ${p.sizeLabel}` });
+  }
+  return out;
+}
+
+function intersectOwned(owned: string[], picked?: string[]): string[] {
+  if (!picked) return owned;
+  const allow = new Set(picked);
+  return owned.filter((id) => allow.has(id));
+}
+
+export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandConvert | null {
+  const from = majorityBrand(doc);
+  const to = otherBrand(from);
+  const anyOwned =
+    doc.parts.frontIds.length +
+      doc.parts.tailIds.length +
+      doc.parts.fuseIds.length +
+      doc.parts.mastIds.length >
+    0;
+  if (!anyOwned) return null;
+
+  const frontIds = intersectOwned(doc.parts.frontIds, include?.frontIds);
+  const tailIds = intersectOwned(doc.parts.tailIds, include?.tailIds);
+  const fuseIds = intersectOwned(doc.parts.fuseIds, include?.fuseIds);
+  const mastIds = intersectOwned(doc.parts.mastIds, include?.mastIds);
+
+  const rows: ConvertRow[] = [];
+  const frontHits = new Map<
+    string,
+    { twinId: string; twinTitle: string; score: number }[]
+  >();
+
+  for (const id of frontIds) {
+    const p = frontById(id);
     if (!p) continue;
-    const twin = rankFrontTwins(p, 1)[0];
+    const twins = rankFrontTwins(p, 24);
+    const nearest = twins[0];
+    frontHits.set(
+      id,
+      twins.map((t) => ({
+        twinId: t.front.id,
+        twinTitle: `${t.front.familyOfficial} ${t.front.sizeLabel}`,
+        score: t.score,
+      })),
+    );
     rows.push({
       kind: "front",
       ownedId: id,
       ownedTitle: `${p.familyOfficial} ${p.sizeLabel}`,
-      twinId: twin?.front.id ?? null,
-      twinTitle: twin ? `${twin.front.familyOfficial} ${twin.front.sizeLabel}` : null,
-      score: twin?.score ?? null,
-      why: twin?.why[0] ?? "No published-spec twin.",
+      twinId: nearest?.front.id ?? null,
+      twinTitle: nearest ? `${nearest.front.familyOfficial} ${nearest.front.sizeLabel}` : null,
+      score: nearest?.score ?? null,
+      why: nearest?.why[0] ?? "No published-spec twin.",
     });
   }
-  for (const id of doc.parts.tailIds) {
+  for (const id of tailIds) {
     const p = tailById(id);
     if (!p) continue;
     const t = nearestTail(id);
@@ -482,7 +569,7 @@ export function brandConvert(doc: QuiverDoc): BrandConvert | null {
         : "No tail twin.",
     });
   }
-  for (const id of doc.parts.fuseIds) {
+  for (const id of fuseIds) {
     const p = fuseById(id);
     if (!p) continue;
     const t = nearestFuse(id);
@@ -494,11 +581,11 @@ export function brandConvert(doc: QuiverDoc): BrandConvert | null {
       twinTitle: t ? t.sizeLabel : null,
       score: null,
       why: t
-        ? `Closest overall length (${p.fuse_length_mm ?? "—"} mm → ${t.fuse_length_mm ?? "—"} mm). Tail lever still unpublished.`
+        ? `Closest overall length (${p.fuse_length_mm ?? "—"} mm → ${t.fuse_length_mm ?? "—"} mm).`
         : "No fuse twin.",
     });
   }
-  for (const id of doc.parts.mastIds) {
+  for (const id of mastIds) {
     const p = mastById(id);
     if (!p) continue;
     const t = nearestMast(id);
@@ -517,21 +604,111 @@ export function brandConvert(doc: QuiverDoc): BrandConvert | null {
     });
   }
 
-  const unique = (kind: ConvertRow["kind"]) =>
-    new Set(rows.filter((r) => r.kind === kind && r.twinId).map((r) => r.twinId as string)).size;
   const owned = (kind: ConvertRow["kind"]) => rows.filter((r) => r.kind === kind).length;
-  const uniqueNeeded = {
-    fronts: unique("front"),
-    tails: unique("tail"),
-    fuses: unique("fuse"),
-    masts: unique("mast"),
-    total: unique("front") + unique("tail") + unique("fuse") + unique("mast"),
-  };
   const ownedCounts = {
     fronts: owned("front"),
     tails: owned("tail"),
     fuses: owned("fuse"),
     masts: owned("mast"),
+  };
+
+  const hitByTwin = new Map<string, FrontOverlapGroup>();
+  for (const r of rows.filter((row) => row.kind === "front")) {
+    for (const hit of frontHits.get(r.ownedId) ?? []) {
+      if (hit.score < FRONT_OVERLAP_MIN) continue;
+      const g = hitByTwin.get(hit.twinId) ?? {
+        twinId: hit.twinId,
+        twinTitle: hit.twinTitle,
+        owned: [],
+        save: 0,
+      };
+      g.owned.push({ id: r.ownedId, title: r.ownedTitle, score: hit.score });
+      hitByTwin.set(hit.twinId, g);
+    }
+  }
+  const frontOverlaps: FrontOverlapGroup[] = [...hitByTwin.values()]
+    .filter((g) => g.owned.length >= 2)
+    .map((g) => ({ ...g, save: g.owned.length - 1 }))
+    .sort((a, b) => b.owned.length - a.owned.length || b.save - a.save);
+
+  const collapsedOwned = new Set(frontOverlaps.flatMap((g) => g.owned.map((o) => o.id)));
+  const tableRows = rows.filter((r) => !(r.kind === "front" && collapsedOwned.has(r.ownedId)));
+
+  const frontBuys: ConvertBuyItem[] = [];
+  const uncovered = new Set(rows.filter((r) => r.kind === "front").map((r) => r.ownedId));
+  const usedTwin = new Set<string>();
+  while (uncovered.size) {
+    let best: FrontOverlapGroup | null = null;
+    let bestCover: FrontOverlapGroup["owned"] = [];
+    for (const g of frontOverlaps) {
+      if (usedTwin.has(g.twinId)) continue;
+      const covers = g.owned.filter((o) => uncovered.has(o.id));
+      if (covers.length > bestCover.length) {
+        best = g;
+        bestCover = covers;
+      }
+    }
+    if (best && bestCover.length >= 2) {
+      frontBuys.push({
+        kind: "front",
+        twinId: best.twinId,
+        twinTitle: best.twinTitle,
+        covers: bestCover.map((o) => ({
+          ownedId: o.id,
+          ownedTitle: o.title,
+          score: o.score,
+        })),
+      });
+      usedTwin.add(best.twinId);
+      for (const o of bestCover) uncovered.delete(o.id);
+      continue;
+    }
+    const leftover = rows.find((r) => r.kind === "front" && uncovered.has(r.ownedId));
+    if (!leftover) break;
+    if (leftover.twinId && leftover.twinTitle) {
+      const existing = frontBuys.find((b) => b.twinId === leftover.twinId);
+      const cover = {
+        ownedId: leftover.ownedId,
+        ownedTitle: leftover.ownedTitle,
+        score: leftover.score,
+      };
+      if (existing) existing.covers.push(cover);
+      else {
+        frontBuys.push({
+          kind: "front",
+          twinId: leftover.twinId,
+          twinTitle: leftover.twinTitle,
+          covers: [cover],
+        });
+      }
+    }
+    uncovered.delete(leftover.ownedId);
+  }
+
+  const buyMap = new Map<string, ConvertBuyItem>();
+  const kindOrder: Record<ConvertRow["kind"], number> = { front: 0, tail: 1, fuse: 2, mast: 3 };
+  for (const item of frontBuys) buyMap.set(`front:${item.twinId}`, item);
+  for (const r of rows) {
+    if (r.kind === "front" || !r.twinId || !r.twinTitle) continue;
+    const key = `${r.kind}:${r.twinId}`;
+    let item = buyMap.get(key);
+    if (!item) {
+      item = { kind: r.kind, twinId: r.twinId, twinTitle: r.twinTitle, covers: [] };
+      buyMap.set(key, item);
+    }
+    item.covers.push({ ownedId: r.ownedId, ownedTitle: r.ownedTitle, score: r.score });
+  }
+  const buyList = [...buyMap.values()].sort(
+    (a, b) => kindOrder[a.kind] - kindOrder[b.kind] || a.twinTitle.localeCompare(b.twinTitle),
+  );
+
+  const uniqueOf = (kind: ConvertRow["kind"]) => buyList.filter((b) => b.kind === kind).length;
+  const uniqueNeeded = {
+    fronts: uniqueOf("front"),
+    tails: uniqueOf("tail"),
+    fuses: uniqueOf("fuse"),
+    masts: uniqueOf("mast"),
+    total: buyList.length,
   };
   const overlap = {
     fronts: Math.max(0, ownedCounts.fronts - uniqueNeeded.fronts),
@@ -539,11 +716,12 @@ export function brandConvert(doc: QuiverDoc): BrandConvert | null {
     fuses: Math.max(0, ownedCounts.fuses - uniqueNeeded.fuses),
     masts: Math.max(0, ownedCounts.masts - uniqueNeeded.masts),
   };
+  const overlapSaved = overlap.fronts + overlap.tails + overlap.fuses + overlap.masts;
 
   const bits: string[] = [];
   if (ownedCounts.fronts) {
     bits.push(
-      `${ownedCounts.fronts} owned ${brandName(from)} fronts map to ${uniqueNeeded.fronts} unique ${brandName(to)} twins` +
+      `${ownedCounts.fronts} included ${brandName(from)} fronts map to ${uniqueNeeded.fronts} unique ${brandName(to)} twins` +
         (overlap.fronts ? ` — overlap saves ${overlap.fronts} front purchase${overlap.fronts === 1 ? "" : "s"}` : ""),
     );
   }
@@ -553,9 +731,10 @@ export function brandConvert(doc: QuiverDoc): BrandConvert | null {
         (overlap.masts ? ` (save ${overlap.masts})` : ""),
     );
   }
-  const headline =
-    bits.join(". ") ||
-    `Add some ${brandName(from)} parts first, then this will count how many unique ${brandName(to)} pieces a switch actually takes.`;
+  const headline = !rows.length
+    ? `Check owned parts to include them in the ${brandName(to)} conversion`
+    : bits.join(". ") ||
+      `${uniqueNeeded.total} unique ${brandName(to)} parts cover the checked items`;
 
   const path: BrandConvert["path"] = [];
   const seed = inferSetup(doc, from);
@@ -580,9 +759,10 @@ export function brandConvert(doc: QuiverDoc): BrandConvert | null {
       }
     }
   } else if (ownedCounts.fronts) {
-    const first = ownedFronts(doc)[0];
-    const t = nearestFront(first.id);
-    if (t) {
+    const firstId = frontIds[0];
+    const first = firstId ? frontById(firstId) : undefined;
+    const t = first ? nearestFront(first.id) : null;
+    if (first && t) {
       path.push({
         headline: `Start the other-brand path at ${t.familyOfficial} ${t.sizeLabel}`,
         why: [
@@ -592,8 +772,20 @@ export function brandConvert(doc: QuiverDoc): BrandConvert | null {
     }
   }
 
-  if (!rows.length) return null;
-  return { from, to, rows, uniqueNeeded, ownedCounts, overlap, headline, path };
+  return {
+    from,
+    to,
+    rows,
+    tableRows,
+    uniqueNeeded,
+    ownedCounts,
+    overlap,
+    overlapSaved,
+    headline,
+    path,
+    buyList,
+    frontOverlaps,
+  };
 }
 
 export function newNamedSetup(partial: Omit<NamedSetup, "id">): NamedSetup {

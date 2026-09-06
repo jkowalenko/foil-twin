@@ -19,8 +19,10 @@ import type {
 } from "../data/types";
 import { brandName, n, otherBrand } from "../lib/format";
 import {
+  FRONT_OVERLAP_MIN,
   analyzeGaps,
   brandConvert,
+  listOwnedConvertParts,
   loadQuiver,
   majorityBrand,
   newNamedSetup,
@@ -37,6 +39,7 @@ type Props = {
 export function QuiverView({ onAdopt }: Props) {
   const [doc, setDoc] = useState<QuiverDoc>(() => loadQuiver());
   const [draft, setDraft] = useState<Omit<NamedSetup, "id">>(() => emptyDraft("axis"));
+  const [convertOff, setConvertOff] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     saveQuiver(doc);
@@ -44,8 +47,26 @@ export function QuiverView({ onAdopt }: Props) {
 
   const gaps = useMemo(() => analyzeGaps(doc), [doc]);
   const recs = useMemo(() => recommendBuys(doc), [doc]);
-  const convert = useMemo(() => brandConvert(doc), [doc]);
+  const ownedConvert = useMemo(() => listOwnedConvertParts(doc), [doc]);
+  const convert = useMemo(() => {
+    const include = {
+      frontIds: doc.parts.frontIds.filter((id) => !convertOff.has(id)),
+      tailIds: doc.parts.tailIds.filter((id) => !convertOff.has(id)),
+      fuseIds: doc.parts.fuseIds.filter((id) => !convertOff.has(id)),
+      mastIds: doc.parts.mastIds.filter((id) => !convertOff.has(id)),
+    };
+    return brandConvert(doc, include);
+  }, [doc, convertOff]);
   const home = majorityBrand(doc);
+
+  function toggleConvert(id: string) {
+    setConvertOff((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function patch(next: Partial<QuiverDoc> | ((d: QuiverDoc) => QuiverDoc)) {
     setDoc((d) => (typeof next === "function" ? next(d) : { ...d, ...next }));
@@ -306,7 +327,9 @@ export function QuiverView({ onAdopt }: Props) {
                 Brand convert
               </h2>
               <div className="sub">
-                Every owned part → nearest {brandName(otherBrand(home))} twin. Unique count, not a shopping list of duplicates.
+                Checked owned parts → nearest {brandName(otherBrand(home))} twin.
+                Unique buy list, not a shopping list of duplicates. Fronts that
+                share a twin at {FRONT_OVERLAP_MIN}%+ front match are collapsed.
               </div>
             </div>
           </div>
@@ -314,6 +337,43 @@ export function QuiverView({ onAdopt }: Props) {
             {!convert && <p className="note">Own at least one part to map the other brand.</p>}
             {convert && (
               <>
+                {ownedConvert.length > 0 && (
+                  <div className="convert-include">
+                    <div className="convert-kind-h">Include in conversion</div>
+                    {(["front", "tail", "fuse", "mast"] as const).map((kind) => {
+                      const items = ownedConvert.filter((p) => p.kind === kind);
+                      if (!items.length) return null;
+                      const kindLabel =
+                        kind === "front"
+                          ? "Front wings"
+                          : kind === "tail"
+                            ? "Tails"
+                            : kind === "fuse"
+                              ? "Fuselages"
+                              : "Masts";
+                      return (
+                        <div key={kind} className="convert-kind">
+                          <div className="convert-kind-h">{kindLabel}</div>
+                          <div className="convert-checks">
+                            {items.map((p) => {
+                              const on = !convertOff.has(p.id);
+                              return (
+                                <label key={p.id} className={on ? "" : "off"}>
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => toggleConvert(p.id)}
+                                  />
+                                  {p.title}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 <p className="convert-headline">{convert.headline}.</p>
                 <div className="pills">
                   <span className="pill">
@@ -333,31 +393,93 @@ export function QuiverView({ onAdopt }: Props) {
                     {convert.overlap.masts ? ` · save ${convert.overlap.masts}` : ""}
                   </span>
                   <span className="pill">
-                    {convert.uniqueNeeded.total} unique {brandName(convert.to)} parts to cover this quiver
+                    {convert.uniqueNeeded.total} unique {brandName(convert.to)} parts to cover checked items
                   </span>
+                  {convert.overlapSaved > 0 && (
+                    <span className="pill save-pill">
+                      Overlap saves {convert.overlapSaved} purchase
+                      {convert.overlapSaved === 1 ? "" : "s"} vs a 1:1 swap
+                    </span>
+                  )}
                 </div>
-                <table className="convert-table">
-                  <thead>
-                    <tr>
-                      <th>You own ({brandName(convert.from)})</th>
-                      <th>Nearest {brandName(convert.to)}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {convert.rows.map((r) => (
-                      <tr key={`${r.kind}-${r.ownedId}`}>
-                        <td>
-                          <span className="kind-tag">{r.kind}</span> {r.ownedTitle}
-                        </td>
-                        <td>
-                          {r.twinTitle ?? "—"}
-                          {r.score != null ? ` · ${Math.round(r.score)}%` : ""}
-                          <div className="sub">{r.why}</div>
-                        </td>
-                      </tr>
+                {convert.frontOverlaps.length > 0 && (
+                  <div className="overlap-list">
+                    <h3>Shared other-brand fronts ({FRONT_OVERLAP_MIN}%+)</h3>
+                    {convert.frontOverlaps.map((g) => (
+                      <div key={g.twinId} className="overlap-card">
+                        <strong>{g.twinTitle}</strong> covers{" "}
+                        {g.owned
+                          .map((o) => `${o.title} (${Math.round(o.score)}%)`)
+                          .join(", ")}
+                        . {g.owned.length} owned fronts → 1 buy
+                        <span className="savings">
+                          {" "}
+                          — save {g.save} purchase{g.save === 1 ? "" : "s"}
+                        </span>
+                        .
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                )}
+                <h3 className="quiver-h">Buy list</h3>
+                {convert.buyList.length === 0 ? (
+                  <p className="note">
+                    Nothing to buy until checked owned parts map to other-brand twins.
+                  </p>
+                ) : (
+                  <div className="buy-list">
+                    {convert.buyList.map((item) => (
+                      <div
+                        key={`${item.kind}-${item.twinId}`}
+                        className={`buy-item${item.covers.length > 1 ? " overlap" : ""}`}
+                      >
+                        <div className="twin-top">
+                          <strong>
+                            <span className="kind-tag">{item.kind}</span> {item.twinTitle}
+                          </strong>
+                          {item.covers.length > 1 && (
+                            <span className="savings">
+                              covers {item.covers.length} · save {item.covers.length - 1}
+                            </span>
+                          )}
+                        </div>
+                        <p className="note" style={{ marginTop: 6 }}>
+                          Covers {item.covers.map((c) => c.ownedTitle).join(", ")}
+                          {item.covers.some((c) => c.score != null)
+                            ? ` (${item.covers
+                                .filter((c) => c.score != null)
+                                .map((c) => `${Math.round(c.score as number)}%`)
+                                .join(", ")})`
+                            : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {convert.tableRows.length > 0 && (
+                  <table className="convert-table">
+                    <thead>
+                      <tr>
+                        <th>You own ({brandName(convert.from)})</th>
+                        <th>Nearest {brandName(convert.to)}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {convert.tableRows.map((r) => (
+                        <tr key={`${r.kind}-${r.ownedId}`}>
+                          <td>
+                            <span className="kind-tag">{r.kind}</span> {r.ownedTitle}
+                          </td>
+                          <td>
+                            {r.twinTitle ?? "—"}
+                            {r.score != null ? ` · ${Math.round(r.score)}%` : ""}
+                            <div className="sub">{r.why}</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
                 {convert.path.length > 0 && (
                   <div className="convert-path">
                     <h3>If you switched brands</h3>

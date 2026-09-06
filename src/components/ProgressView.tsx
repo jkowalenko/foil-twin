@@ -103,8 +103,12 @@ export function ProgressView({
             <p className="note">
               Heuristics: smaller area → speed / less lift. Higher AR → glide /
               less roll. Shorter fuse → looser. Smaller tail → looser yaw.
-              Recommendations stay on {brandName(setup.brand)}; the top pick
-              also gets the closest {brandName(otherBrand(setup.brand))} twin.
+              Recommendations stay on {brandName(setup.brand)} and only move
+              forward on the chosen goal — never a larger wing for speed or
+              smaller size, never a smaller wing for lift, never a longer fuse
+              for tighter turns, never a lower AR for glide. Up to 3, best
+              first. The active pick also gets the closest{" "}
+              {brandName(otherBrand(setup.brand))} twin.
             </p>
           )}
         </div>
@@ -114,7 +118,10 @@ export function ProgressView({
         {recs.length === 0 && (
           <div className="panel">
             <div className="panel-b">
-              <p className="note">No next step from this combination — try another goal.</p>
+              <p className="note">
+              No next step that strictly advances this goal from this combination
+              — try another goal.
+            </p>
             </div>
           </div>
         )}
