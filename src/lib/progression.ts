@@ -323,19 +323,33 @@ function familyHopFront(
   return cur.id === front.id ? null : cur;
 }
 
-function shorterFuse(current: Fuselage): Fuselage | null {
-  const list = catalog.fuselages
-    .filter((f) => f.brand === current.brand && f.fuse_length_mm != null)
+/**
+ * Same-family length ladder (shortest → longest).
+ * Scoped to `familyOfficial` so a brand-wide sort cannot skip a series
+ * (Advance+ Short → Ultra Short → Crazy Short → Silly Short).
+ */
+function fuseLengthLadder(current: Fuselage): Fuselage[] {
+  return catalog.fuselages
+    .filter(
+      (f) =>
+        f.brand === current.brand &&
+        f.familyOfficial === current.familyOfficial &&
+        f.fuse_length_mm != null,
+    )
     .sort((a, b) => (a.fuse_length_mm ?? 0) - (b.fuse_length_mm ?? 0));
+}
+
+/** Next catalog SKU one step shorter in this fuse family. Never skips a length. */
+export function shorterFuse(current: Fuselage): Fuselage | null {
+  const list = fuseLengthLadder(current);
   const i = list.findIndex((f) => f.id === current.id);
   if (i <= 0) return null;
   return list[i - 1] ?? null;
 }
 
-function longerFuse(current: Fuselage): Fuselage | null {
-  const list = catalog.fuselages
-    .filter((f) => f.brand === current.brand && f.fuse_length_mm != null)
-    .sort((a, b) => (a.fuse_length_mm ?? 0) - (b.fuse_length_mm ?? 0));
+/** Next catalog SKU one step longer in this fuse family. Never skips a length. */
+export function longerFuse(current: Fuselage): Fuselage | null {
+  const list = fuseLengthLadder(current);
   const i = list.findIndex((f) => f.id === current.id);
   if (i < 0) return null;
   return list[i + 1] ?? null;

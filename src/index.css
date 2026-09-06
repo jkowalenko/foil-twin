@@ -910,6 +910,42 @@ input {
 .buy-item.overlap {
   border-color: var(--arm);
 }
+.convert-tier {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 0 0 10px;
+  background: var(--card-inner);
+}
+.convert-tier-90 {
+  border-color: var(--line-strong);
+}
+.convert-tier h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.convert-tier-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+.convert-tier .buy-list {
+  margin: 0;
+}
+.convert-ranges {
+  margin: 0 0 12px;
+}
+.convert-range {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 6px;
+  line-height: 1.45;
+}
+.convert-buy-note {
+  margin-top: 4px;
+  color: var(--warn);
+}
 .convert-table {
   width: 100%;
   border-collapse: collapse;

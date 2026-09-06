@@ -1,6 +1,6 @@
 import { catalog, fusesByBrand } from "../data/catalog";
 import { GOALS } from "../data/labels";
-import type { Goal, Setup } from "../data/types";
+import type { Goal, QuiverDoc, Setup } from "../data/types";
 import { frontTitle } from "./format";
 import {
   MIN_FRONT_TWIN,
@@ -13,9 +13,22 @@ import {
   resolveSetup,
   sameArClass,
 } from "./match";
-import { isStrictForward, nextSetups, type NextSetup } from "./progression";
+import { isStrictForward, longerFuse, nextSetups, shorterFuse, type NextSetup } from "./progression";
 import type { RiderLevel } from "../data/types";
-import { FRONT_OVERLAP_MIN, brandConvert } from "./quiver";
+import { FRONT_OVERLAP_MIN, brandConvert, recommendBuys } from "./quiver";
+
+function quiverDoc(partial: Partial<QuiverDoc> & { parts: QuiverDoc["parts"] }): QuiverDoc {
+  return {
+    version: 1,
+    owner: null,
+    updated: new Date().toISOString(),
+    setups: [],
+    disciplines: ["wing"],
+    level: "comfortable",
+    goal: "more-speed",
+    ...partial,
+  };
+}
 
 function setup(frontId: string, fuseId: string, tailId: string): Setup {
   const brand = catalog.fronts.find((f) => f.id === frontId)!.brand;
@@ -413,25 +426,128 @@ if (convert) {
   if (convert.frontOverlaps.length < 1 || convert.uniqueNeeded.fronts !== 2) {
     throw new Error("Expected 85% front overlap to collapse three owned fronts into two unique buys");
   }
+  const t80 = convert.coverageTiers.find((t) => t.pct === 80);
+  const t90 = convert.coverageTiers.find((t) => t.pct === 90);
+  if (!t80 || !t90) {
+    throw new Error("Coverage tiers must exist at pct 80 and 90");
+  }
+  console.log(
+    `coverage 80%=${t80.items.length} buys covering ${t80.coveredOwned}/${t80.totalOwned}; 90%=${t90.items.length} buys covering ${t90.coveredOwned}/${t90.totalOwned}`,
+  );
+  if (t80.items.length > t90.items.length) {
+    throw new Error("80% coverage must need fewer or equal unique buys vs 90%");
+  }
   const none = brandConvert(
-    {
-      version: 1,
-      owner: null,
-      updated: new Date().toISOString(),
+    quiverDoc({
       parts: {
         mastIds: [],
         fuseIds: [],
         frontIds: ["axis-artv2-879", "axis-artv2-819"],
         tailIds: [],
       },
-      setups: [],
-      disciplines: ["wing"],
-      level: "comfortable",
-      goal: "more-speed",
-    },
+    }),
     { frontIds: [], tailIds: [], fuseIds: [], mastIds: [] },
   );
   console.log(`unchecked all: buyList=${none?.buyList.length ?? 0} rows=${none?.rows.length ?? 0}`);
+  if (!none?.coverageTiers.some((t) => t.pct === 80) || !none.coverageTiers.some((t) => t.pct === 90)) {
+    throw new Error("Empty include still returns 80 and 90 coverage tiers");
+  }
+}
+
+section("Quiver convert 80/90 coverage + HA range (5 ART fronts)");
+const rangeConvert = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: [],
+      fuseIds: [],
+      frontIds: [
+        "axis-artv2-1099",
+        "axis-artv2-999",
+        "axis-artv2-939",
+        "axis-artv2-879",
+        "axis-artv2-819",
+      ],
+      tailIds: [],
+    },
+  }),
+);
+if (!rangeConvert) {
+  throw new Error("Expected convert for five ART v2 fronts");
+}
+const r80 = rangeConvert.coverageTiers.find((t) => t.pct === 80);
+const r90 = rangeConvert.coverageTiers.find((t) => t.pct === 90);
+if (!r80 || !r90) {
+  throw new Error("Coverage tiers must exist at pct 80 and 90");
+}
+console.log(
+  `5 ART fronts: unique=${rangeConvert.uniqueNeeded.fronts} 80%=${r80.items.length} 90%=${r90.items.length} ranges=${rangeConvert.rangeSummaries.map((r) => r.note).join(" | ") || "(none)"}`,
+);
+if (r80.items.length > r90.items.length) {
+  throw new Error("80% coverage must need fewer or equal unique buys vs 90%");
+}
+const haRange = rangeConvert.rangeSummaries.find((r) => r.kind === "front" && r.familyOfficial === "HA Front Foil");
+if (rangeConvert.uniqueNeeded.fronts >= 3 && !haRange) {
+  throw new Error("Expected HA Front Foil progressive range when 3+ HA sizes are suggested");
+}
+
+section("Quiver fuse ladder adjacency (Short + Ultra Short → Crazy Short)");
+const fuseQuiver = quiverDoc({
+  parts: {
+    mastIds: ["axis-al19-750"],
+    fuseIds: ["axis-advplus-short", "axis-advplus-ultrashort"],
+    frontIds: ["axis-spitfire-840"],
+    tailIds: ["axis-surfskinny-320-48"],
+  },
+  disciplines: ["surf"],
+  level: "comfortable",
+  goal: "tighter-turns",
+});
+const fuseBuys = recommendBuys(fuseQuiver);
+const fuseRecIds = fuseBuys.filter((r) => r.kind === "fuse").map((r) => r.partId);
+console.log(`fuse recs: ${fuseRecIds.join(", ") || "(none)"}`);
+if (!fuseRecIds.includes("axis-advplus-crazyshort")) {
+  throw new Error(
+    `Expected Crazy Short (axis-advplus-crazyshort) as next shorter fuse, got ${fuseRecIds.join(", ") || "(none)"}`,
+  );
+}
+if (fuseRecIds.includes("axis-advplus-sillyshort")) {
+  throw new Error("Silly Short must not be the next fuse buy while Crazy Short is unowned");
+}
+
+section("Progression fuse steps stay adjacent");
+let fuseAdjFail = 0;
+const fromShort = setup("axis-spitfire-840", "axis-advplus-short", "axis-surfskinny-320-48");
+const tightFromShort = nextSetups(fromShort, "comfortable", "surf", "tighter-turns");
+const fuseStep = tightFromShort.find((r) => r.front.id === "axis-spitfire-840" && r.fuse.id !== "axis-advplus-short");
+console.log(
+  `tighter-turns from Short: ${fuseStep ? `${fuseStep.fuse.id} [${fuseStep.stepLabel}]` : "no fuse-only step"}`,
+);
+if (fuseStep && fuseStep.fuse.id !== "axis-advplus-ultrashort") {
+  console.log(`FAIL progression skipped Ultra Short: ${fuseStep.fuse.id}`);
+  fuseAdjFail += 1;
+}
+for (const front of catalog.fronts) {
+  const fuse = fusesByBrand(front.brand)[0];
+  const tail = catalog.tails.find((t) => t.brand === front.brand);
+  if (!fuse || !tail) continue;
+  const s = setup(front.id, fuse.id, tail.id);
+  const src = resolveSetup(s);
+  if (!src) continue;
+  for (const goal of ["tighter-turns", "more-glide"] as Goal[]) {
+    const list = nextSetups(s, "comfortable", "wing", goal);
+    for (const r of list) {
+      if (r.front.id !== src.front.id || r.fuse.id === src.fuse.id) continue;
+      const expect = goal === "tighter-turns" ? shorterFuse(src.fuse) : longerFuse(src.fuse);
+      if (!expect || r.fuse.id !== expect.id) {
+        console.log(`FAIL ${front.id} ${goal}: fuse ${src.fuse.id} → ${r.fuse.id} (want ${expect?.id ?? "none"})`);
+        fuseAdjFail += 1;
+      }
+    }
+  }
+}
+console.log(`fuse-adjacency fails=${fuseAdjFail}`);
+if (fuseAdjFail) {
+  throw new Error(`Progression fuse adjacency failed ${fuseAdjFail} check(s)`);
 }
 
 section("Mast twins (length)");

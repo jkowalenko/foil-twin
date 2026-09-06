@@ -29,6 +29,7 @@ import {
   recommendBuys,
   saveQuiver,
   toggleId,
+  type ConvertBuyItem,
 } from "../lib/quiver";
 import { BrandMark } from "./BrandMark";
 
@@ -327,9 +328,10 @@ export function QuiverView({ onAdopt }: Props) {
                 Brand convert
               </h2>
               <div className="sub">
-                Checked owned parts → nearest {brandName(otherBrand(home))} twin.
-                Unique buy list, not a shopping list of duplicates. Fronts that
-                share a twin at {FRONT_OVERLAP_MIN}%+ front match are collapsed.
+                Checked owned parts → nearest {brandName(otherBrand(home))} twins,
+                then greedy ~80% / ~90% coverage. Fronts sharing a twin at{" "}
+                {FRONT_OVERLAP_MIN}%+ collapse. Path follows disciplines, level,
+                and goal.
               </div>
             </div>
           </div>
@@ -395,6 +397,11 @@ export function QuiverView({ onAdopt }: Props) {
                   <span className="pill">
                     {convert.uniqueNeeded.total} unique {brandName(convert.to)} parts to cover checked items
                   </span>
+                  {convert.coverageTiers.map((tier) => (
+                    <span key={`pill-${tier.pct}`} className="pill">
+                      ~{tier.pct}% {tier.items.length} unique · {tier.coveredOwned}/{tier.totalOwned} parts
+                    </span>
+                  ))}
                   {convert.overlapSaved > 0 && (
                     <span className="pill save-pill">
                       Overlap saves {convert.overlapSaved} purchase
@@ -421,40 +428,47 @@ export function QuiverView({ onAdopt }: Props) {
                     ))}
                   </div>
                 )}
-                <h3 className="quiver-h">Buy list</h3>
-                {convert.buyList.length === 0 ? (
+                <h3 className="quiver-h">Coverage</h3>
+                {convert.coverageTiers.map((tier) => (
+                  <div key={tier.pct} className={`convert-tier convert-tier-${tier.pct}`}>
+                    <h3>~{tier.pct}% coverage</h3>
+                    <p className="convert-tier-meta">{tier.note}</p>
+                    {tier.items.length === 0 ? (
+                      <p className="note">No other-brand buys in this tier.</p>
+                    ) : (
+                      <div className="buy-list">
+                        {tier.items.map((item) => (
+                          <ConvertBuyCard key={`${tier.pct}-${item.kind}-${item.twinId}`} item={item} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {convert.rangeSummaries.length > 0 && (
+                  <div className="convert-ranges">
+                    {convert.rangeSummaries.map((r) => (
+                      <p key={`${r.kind}-${r.familyOfficial}-${r.minId}`} className="convert-range">
+                        {r.note}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {convert.buyList.length > 0 &&
+                  convert.buyList.length !==
+                    (convert.coverageTiers.find((t) => t.pct === 90)?.items.length ?? 0) && (
+                    <>
+                      <h3 className="quiver-h">All unique twins</h3>
+                      <div className="buy-list">
+                        {convert.buyList.map((item) => (
+                          <ConvertBuyCard key={`all-${item.kind}-${item.twinId}`} item={item} />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                {convert.buyList.length === 0 && (
                   <p className="note">
                     Nothing to buy until checked owned parts map to other-brand twins.
                   </p>
-                ) : (
-                  <div className="buy-list">
-                    {convert.buyList.map((item) => (
-                      <div
-                        key={`${item.kind}-${item.twinId}`}
-                        className={`buy-item${item.covers.length > 1 ? " overlap" : ""}`}
-                      >
-                        <div className="twin-top">
-                          <strong>
-                            <span className="kind-tag">{item.kind}</span> {item.twinTitle}
-                          </strong>
-                          {item.covers.length > 1 && (
-                            <span className="savings">
-                              covers {item.covers.length} · save {item.covers.length - 1}
-                            </span>
-                          )}
-                        </div>
-                        <p className="note" style={{ marginTop: 6 }}>
-                          Covers {item.covers.map((c) => c.ownedTitle).join(", ")}
-                          {item.covers.some((c) => c.score != null)
-                            ? ` (${item.covers
-                                .filter((c) => c.score != null)
-                                .map((c) => `${Math.round(c.score as number)}%`)
-                                .join(", ")})`
-                            : ""}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
                 )}
                 {convert.tableRows.length > 0 && (
                   <table className="convert-table">
@@ -500,6 +514,33 @@ export function QuiverView({ onAdopt }: Props) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ConvertBuyCard({ item }: { item: ConvertBuyItem }) {
+  return (
+    <div className={`buy-item${item.covers.length > 1 ? " overlap" : ""}`}>
+      <div className="twin-top">
+        <strong>
+          <span className="kind-tag">{item.kind}</span> {item.twinTitle}
+        </strong>
+        {item.covers.length > 1 && (
+          <span className="savings">
+            covers {item.covers.length} · save {item.covers.length - 1}
+          </span>
+        )}
+      </div>
+      <p className="note" style={{ marginTop: 6 }}>
+        Covers {item.covers.map((c) => c.ownedTitle).join(", ")}
+        {item.covers.some((c) => c.score != null)
+          ? ` (${item.covers
+              .filter((c) => c.score != null)
+              .map((c) => `${Math.round(c.score as number)}%`)
+              .join(", ")})`
+          : ""}
+      </p>
+      {item.note && <p className="note convert-buy-note">{item.note}</p>}
     </div>
   );
 }
