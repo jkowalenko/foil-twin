@@ -30,6 +30,35 @@ function quiverDoc(partial: Partial<QuiverDoc> & { parts: QuiverDoc["parts"] }):
   };
 }
 
+function assertCompleteKit(label: string, convert: ReturnType<typeof brandConvert>) {
+  if (!convert) throw new Error(`${label}: expected convert`);
+  for (const pct of [80, 90] as const) {
+    const tier = convert.coverageTiers.find((t) => t.pct === pct);
+    if (!tier) throw new Error(`${label}: missing ${pct}% tier`);
+    const kinds = new Set(tier.items.map((i) => i.kind));
+    for (const k of ["front", "tail", "fuse", "mast"] as const) {
+      if (!kinds.has(k)) {
+        throw new Error(
+          `${label}: ${pct}% missing ${k} (items: ${
+            tier.items.map((i) => `${i.kind}:${i.twinTitle}`).join(", ") || "(none)"
+          })`,
+        );
+      }
+    }
+  }
+  const t80 = convert.coverageTiers.find((t) => t.pct === 80)!;
+  const t90 = convert.coverageTiers.find((t) => t.pct === 90)!;
+  const keys90 = new Set(t90.items.map((i) => `${i.kind}:${i.twinId}`));
+  for (const item of t80.items) {
+    if (!keys90.has(`${item.kind}:${item.twinId}`)) {
+      throw new Error(`${label}: 80% ${item.kind}:${item.twinId} (${item.twinTitle}) not in 90%`);
+    }
+  }
+  if (t80.items.length > t90.items.length) {
+    throw new Error(`${label}: 80% has more unique buys than 90%`);
+  }
+}
+
 function setup(frontId: string, fuseId: string, tailId: string): Setup {
   const brand = catalog.fronts.find((f) => f.id === frontId)!.brand;
   return { brand, frontId, fuseId, tailId };
@@ -437,6 +466,10 @@ if (convert) {
   if (t80.items.length > t90.items.length) {
     throw new Error("80% coverage must need fewer or equal unique buys vs 90%");
   }
+  if (!t80.items.some((i) => i.kind === "fuse")) {
+    throw new Error("80% coverage must include a fuse (complete rideable kit)");
+  }
+  assertCompleteKit("overlap 3 fronts", convert);
   const none = brandConvert(
     quiverDoc({
       parts: {
@@ -452,6 +485,7 @@ if (convert) {
   if (!none?.coverageTiers.some((t) => t.pct === 80) || !none.coverageTiers.some((t) => t.pct === 90)) {
     throw new Error("Empty include still returns 80 and 90 coverage tiers");
   }
+  assertCompleteKit("empty include (owns fronts, unchecked all)", none);
 }
 
 section("Quiver convert 80/90 coverage + HA range (5 ART fronts)");
@@ -485,10 +519,101 @@ console.log(
 if (r80.items.length > r90.items.length) {
   throw new Error("80% coverage must need fewer or equal unique buys vs 90%");
 }
+if (!r80.items.some((i) => i.kind === "fuse")) {
+  throw new Error("5 ART 80% kit must include a fuse");
+}
+assertCompleteKit("5 ART fronts", rangeConvert);
 const haRange = rangeConvert.rangeSummaries.find((r) => r.kind === "front" && r.familyOfficial === "HA Front Foil");
 if (rangeConvert.uniqueNeeded.fronts >= 3 && !haRange) {
   throw new Error("Expected HA Front Foil progressive range when 3+ HA sizes are suggested");
 }
+
+section("Quiver convert complete kits (80/90 always rideable)");
+const fullKit = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: ["axis-al19-750"],
+      fuseIds: ["axis-advplus-ultrashort"],
+      frontIds: ["axis-artv2-879", "axis-artv2-939"],
+      tailIds: ["axis-skinny-360-45"],
+    },
+  }),
+);
+assertCompleteKit("full quiver fronts+tails+fuses+masts", fullKit);
+const full80 = fullKit!.coverageTiers.find((t) => t.pct === 80)!;
+console.log(
+  `full kit 80%: ${full80.items.map((i) => `${i.kind}:${i.twinTitle}`).join(" · ")}`,
+);
+
+const missingFuse = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: ["axis-al19-750"],
+      fuseIds: [],
+      frontIds: ["axis-artv2-879", "axis-spitfire-840"],
+      tailIds: ["axis-skinny-360-45"],
+    },
+  }),
+);
+assertCompleteKit("missing owned fuse", missingFuse);
+const missingFuse80 = missingFuse!.coverageTiers.find((t) => t.pct === 80)!;
+const kitFuse = missingFuse80.items.find((i) => i.kind === "fuse");
+if (!kitFuse || kitFuse.covers.length > 0) {
+  throw new Error(
+    `Expected kit-only fuse when none checked, got ${
+      kitFuse ? `${kitFuse.twinTitle} covers=${kitFuse.covers.length}` : "none"
+    }`,
+  );
+}
+if (!kitFuse.kitOnly && !kitFuse.note?.includes("complete setup")) {
+  throw new Error(`Kit fuse note should mark complete setup, got ${kitFuse.note ?? "(none)"}`);
+}
+console.log(`missing fuse → kit fuse ${kitFuse.twinTitle} (${kitFuse.note})`);
+
+const missingMast = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: [],
+      fuseIds: ["axis-advplus-short", "axis-advplus-ultrashort"],
+      frontIds: ["axis-artv2-879"],
+      tailIds: ["axis-skinny-360-45"],
+    },
+    disciplines: ["surf"],
+    goal: "tighter-turns",
+  }),
+);
+assertCompleteKit("missing owned mast", missingMast);
+const missingMast80 = missingMast!.coverageTiers.find((t) => t.pct === 80)!;
+const kitMast = missingMast80.items.find((i) => i.kind === "mast");
+if (!kitMast || kitMast.covers.length > 0) {
+  throw new Error("Expected kit-only mast when none checked");
+}
+console.log(`missing mast → kit mast ${kitMast.twinTitle}`);
+
+const uncheckedKinds = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: ["axis-al19-750"],
+      fuseIds: ["axis-advplus-ultrashort"],
+      frontIds: ["axis-artv2-879"],
+      tailIds: ["axis-skinny-360-45"],
+    },
+  }),
+  { frontIds: [], tailIds: [], fuseIds: [], mastIds: [] },
+);
+assertCompleteKit("owns all kinds, unchecked all", uncheckedKinds);
+const unchecked80 = uncheckedKinds!.coverageTiers.find((t) => t.pct === 80)!;
+if (unchecked80.items.some((i) => i.covers.length > 0)) {
+  throw new Error("Unchecked include should not list covers on kit items");
+}
+if (unchecked80.totalOwned !== 0) {
+  throw new Error("Unchecked include totalOwned should be 0");
+}
+console.log(
+  `unchecked all kinds: 80%=${unchecked80.items.length} kit-only, 90%=${
+    uncheckedKinds!.coverageTiers.find((t) => t.pct === 90)!.items.length
+  }`,
+);
 
 section("Quiver fuse ladder adjacency (Short + Ultra Short → Crazy Short)");
 const fuseQuiver = quiverDoc({

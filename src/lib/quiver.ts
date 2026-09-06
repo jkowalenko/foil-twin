@@ -27,8 +27,9 @@ import {
   rankFrontTwins,
   rankTwins,
   resolveSetup,
+  type TwinMatch,
 } from "./match";
-import { longerFuse, nextSetups, shorterFuse } from "./progression";
+import { longerFuse, nextSetups, shorterFuse, type NextSetup } from "./progression";
 
 export const EMPTY_QUIVER: QuiverDoc = {
   version: 1,
@@ -267,6 +268,27 @@ function pickMastForBand(brand: Brand, min: number, owned: Mast[]): Mast | null 
   return [...src].sort((a, b) => (a.length_mm ?? 0) - (b.length_mm ?? 0))[0];
 }
 
+/** Mid of each MAST_BAND.ideal window (those strings are cm), used only to pick a catalog SKU. */
+const MAST_IDEAL_MM: Record<Discipline, number> = {
+  wing: 825,
+  surf: 675,
+  downwind: 935,
+  wake: 565,
+  race: 950,
+};
+
+function pickMastForKit(brand: Brand, disc: Discipline): Mast | null {
+  const band = MAST_BAND[disc];
+  const pool = catalog.masts.filter(
+    (m) => m.brand === brand && !m.motorIntegrated && (m.length_mm ?? 0) >= band.min,
+  );
+  if (!pool.length) return pickMastForBand(brand, band.min, []);
+  const target = MAST_IDEAL_MM[disc];
+  return [...pool].sort(
+    (a, b) => Math.abs((a.length_mm ?? 0) - target) - Math.abs((b.length_mm ?? 0) - target),
+  )[0];
+}
+
 function pickTailRole(brand: Brand, role: TailWing["role"], owned: TailWing[]): TailWing | null {
   const pool = catalog.tails.filter((t) => t.brand === brand && t.role === role);
   if (!pool.length) return null;
@@ -476,18 +498,32 @@ export type ConvertBuyItem = {
   covers: { ownedId: string; ownedTitle: string; score: number | null }[];
   /** Goal / discipline annotation — never drops coverage of an owned part. */
   note?: string;
+  /** Completeness rec that does not cover a checked owned part. */
+  kitOnly?: boolean;
 };
 
 /**
- * Coverage definition (greedy set-cover of included owned parts):
- * An included owned part is covered when a selected other-brand buy lists it
- * in `covers`. Fronts are covered by their nearest twin and by any other-brand
- * front scoring ≥ FRONT_OVERLAP_MIN (same overlap collapse as the unique buy
- * list). Tails, fuses, and masts are covered by their nearest published twin.
+ * Coverage tiers are complete rideable other-brand kits, not a raw unique-twin list.
  *
- * ~80% / ~90% tiers take the shortest greedy prefix that covers at least
- * ceil(pct/100 × included owned parts). Parts with no twin stay uncovered;
- * the tier note says so. 80% unique buys ≤ 90% unique buys by construction.
+ * An included owned part is covered when a selected buy lists it in `covers`.
+ * Fronts are covered by their nearest twin and by any other-brand front scoring
+ * ≥ FRONT_OVERLAP_MIN (same overlap collapse as the unique buy list). Tails,
+ * fuses, and masts are covered by their nearest published twin.
+ *
+ * Both 80% and 90% always include at least one front, tail, fuse, and mast on
+ * the target brand (catalog SKUs only). Kit-only rows (empty `covers`) fill a
+ * kind when nothing of that kind is checked.
+ *
+ * 80% is a simplified progression kit: one coherent setup scored for
+ * disciplines / level / goal, then a compact cover of checked parts. When a
+ * catalog family would pad with 3+ sizes, keep the progressive min–max pair
+ * and drop mids.
+ *
+ * 90% strictly extends 80% (every 80% kind+twinId is in 90%) with remaining
+ * high-value covers and further goal-forward steps.
+ *
+ * Unique buyList / overlap collapse is unchanged: greedy cover of checked
+ * parts only, no kit padding.
  */
 export type ConvertCoverageTier = {
   pct: 80 | 90;
@@ -695,35 +731,522 @@ function greedySetCover(candidates: ConvertBuyItem[], ownedIds: string[]): Conve
   return picked;
 }
 
+type KitSource = "twin" | "cover" | "next" | "lane" | "band";
+
+function buyKey(item: Pick<ConvertBuyItem, "kind" | "twinId">): string {
+  return `${item.kind}:${item.twinId}`;
+}
+
+function cloneBuy(item: ConvertBuyItem): ConvertBuyItem {
+  return { ...item, covers: item.covers.map((c) => ({ ...c })) };
+}
+
+function isKitNote(note?: string): boolean {
+  return !!note && /^Kit /.test(note);
+}
+
+function upsertBuy(list: ConvertBuyItem[], item: ConvertBuyItem) {
+  const idx = list.findIndex((x) => x.kind === item.kind && x.twinId === item.twinId);
+  if (idx < 0) {
+    list.push(cloneBuy(item));
+    return;
+  }
+  const cur = list[idx];
+  const seen = new Set(cur.covers.map((c) => c.ownedId));
+  const covers = [...cur.covers];
+  for (const c of item.covers) {
+    if (!seen.has(c.ownedId)) covers.push({ ...c });
+  }
+  const note = covers.length
+    ? [cur.note, item.note].find((n) => n && !isKitNote(n))
+    : (item.note ?? cur.note);
+  list[idx] = {
+    ...cur,
+    covers,
+    kitOnly: covers.length ? false : Boolean(cur.kitOnly || item.kitOnly),
+    note,
+  };
+}
+
+function sortBuys(items: ConvertBuyItem[]): ConvertBuyItem[] {
+  const kindOrder: Record<ConvertRow["kind"], number> = { front: 0, tail: 1, fuse: 2, mast: 3 };
+  return [...items].sort(
+    (a, b) => kindOrder[a.kind] - kindOrder[b.kind] || a.twinTitle.localeCompare(b.twinTitle),
+  );
+}
+
+function coveredOwnedIds(items: ConvertBuyItem[], ownedIds: string[]): Set<string> {
+  const allow = new Set(ownedIds);
+  const covered = new Set<string>();
+  for (const item of items) {
+    for (const c of item.covers) {
+      if (allow.has(c.ownedId)) covered.add(c.ownedId);
+    }
+  }
+  return covered;
+}
+
+function defaultFuse(brand: Brand, goal: Goal | null): Fuselage | null {
+  const pool = catalog.fuselages
+    .filter((f) => f.brand === brand && f.fuse_length_mm != null)
+    .sort((a, b) => (a.fuse_length_mm ?? 0) - (b.fuse_length_mm ?? 0));
+  if (!pool.length) return catalog.fuselages.find((f) => f.brand === brand) ?? null;
+  const mid = Math.floor(pool.length / 2);
+  if (goal === "tighter-turns") return pool[Math.max(0, mid - 1)] ?? pool[0];
+  if (goal === "more-glide") return pool[Math.min(pool.length - 1, mid + 1)] ?? pool[pool.length - 1];
+  return pool[mid] ?? pool[0];
+}
+
+function partTitle(kind: ConvertRow["kind"], id: string): string | null {
+  if (kind === "front") {
+    const p = frontById(id);
+    return p ? `${p.familyOfficial} ${p.sizeLabel}` : null;
+  }
+  if (kind === "tail") {
+    const p = tailById(id);
+    return p ? `${p.familyOfficial} ${p.sizeLabel}` : null;
+  }
+  if (kind === "fuse") {
+    const p = fuseById(id);
+    return p ? p.sizeLabel : null;
+  }
+  const p = mastById(id);
+  return p ? `${p.familyOfficial} ${p.sizeLabel}` : null;
+}
+
+function kitOnlyNote(kind: ConvertRow["kind"], checked: boolean): string {
+  const noun =
+    kind === "front" ? "front" : kind === "tail" ? "tail" : kind === "fuse" ? "fuse" : "mast";
+  if (!checked) {
+    return `Kit ${noun} — recommended for complete setup (no owned ${noun} checked)`;
+  }
+  return `Kit ${noun} — recommended for complete setup`;
+}
+
+function buyFromId(
+  kind: ConvertRow["kind"],
+  id: string,
+  buyList: ConvertBuyItem[],
+  checkedOfKind: boolean,
+): ConvertBuyItem | null {
+  const title = partTitle(kind, id);
+  if (!title) return null;
+  const existing = buyList.find((b) => b.kind === kind && b.twinId === id);
+  if (existing) return cloneBuy(existing);
+  return {
+    kind,
+    twinId: id,
+    twinTitle: title,
+    covers: [],
+    kitOnly: true,
+    note: kitOnlyNote(kind, checkedOfKind),
+  };
+}
+
+function midAreaOf(fronts: FrontWing[]): number | null {
+  const areas = fronts
+    .map((f) => f.area_cm2)
+    .filter((n): n is number => n != null)
+    .sort((a, b) => a - b);
+  if (!areas.length) return null;
+  return areas[Math.floor(areas.length / 2)] ?? null;
+}
+
+function disciplineLanes(doc: QuiverDoc): Lane[] {
+  const discs = doc.disciplines.length ? doc.disciplines : (["wing"] as Discipline[]);
+  return [...new Set(discs.flatMap((d) => WANT_LANES[d]))];
+}
+
+/** Seed a from-brand setup so rankTwins can produce a complete other-brand kit. */
+function inferSeedSetup(doc: QuiverDoc, brand: Brand): Setup | null {
+  const named = doc.setups.find((s) => s.brand === brand);
+  if (named) {
+    return { brand: named.brand, frontId: named.frontId, fuseId: named.fuseId, tailId: named.tailId };
+  }
+  const fronts = ownedFronts(doc);
+  const fuses = ownedFuses(doc);
+  const tails = ownedTails(doc);
+  const ownedFront = fronts.find((f) => f.brand === brand) ?? fronts[0];
+  const disc = preferredDiscipline(doc, ownedFront);
+  const seedFront =
+    ownedFront?.brand === brand
+      ? ownedFront
+      : (pickFrontForLane(brand, disciplineLanes(doc), midAreaOf(fronts)) ?? ownedFront);
+  if (!seedFront) return null;
+  const seedBrand = seedFront.brand;
+  const fuse = fuses.find((f) => f.brand === seedBrand) ?? defaultFuse(seedBrand, doc.goal);
+  const wantRole = WANT_TAIL[disc];
+  const tail =
+    (wantRole ? tails.find((t) => t.brand === seedBrand && t.role === wantRole) : undefined) ??
+    tails.find((t) => t.brand === seedBrand) ??
+    (wantRole ? pickTailRole(seedBrand, wantRole, []) : null) ??
+    catalog.tails.find((t) => t.brand === seedBrand) ??
+    null;
+  if (!fuse || !tail) return null;
+  if (seedFront.brand !== fuse.brand || seedFront.brand !== tail.brand) return null;
+  return { brand: seedFront.brand, frontId: seedFront.id, fuseId: fuse.id, tailId: tail.id };
+}
+
+function bestConvertTwin(seed: Setup, doc: QuiverDoc): TwinMatch | null {
+  const src = resolveSetup(seed);
+  const twins = rankTwins(seed, 8);
+  const best = twins[0];
+  if (!best) return null;
+  if (!src || twins.length < 2) return best;
+  const ranked = [...twins].sort((a, b) => {
+    const pa = convertFrontPenalty(src.front, a.front, doc.goal, doc.disciplines);
+    const pb = convertFrontPenalty(src.front, b.front, doc.goal, doc.disciplines);
+    return pa - pb || b.total - a.total;
+  });
+  return (
+    ranked.find((t) => {
+      const p = convertFrontPenalty(src.front, t.front, doc.goal, doc.disciplines);
+      return p === 0 && t.total >= best.total - 8;
+    }) ??
+    ranked[0] ??
+    best
+  );
+}
+
+function paddedFamilyMids(buyList: ConvertBuyItem[]): Set<string> {
+  const groups = new Map<string, ConvertBuyItem[]>();
+  for (const item of buyList) {
+    const fam = twinFamilyOfficial(item);
+    if (!fam) continue;
+    const key = `${item.kind}:${fam}`;
+    const g = groups.get(key) ?? [];
+    g.push(item);
+    groups.set(key, g);
+  }
+  const mids = new Set<string>();
+  for (const items of groups.values()) {
+    if (items.length < 3) continue;
+    const sorted = [...items].sort((a, b) => twinSortKey(a) - twinSortKey(b));
+    for (const m of sorted.slice(1, -1)) mids.add(buyKey(m));
+  }
+  return mids;
+}
+
+function paddedFamilyMinMax(buyList: ConvertBuyItem[]): ConvertBuyItem[] {
+  const groups = new Map<string, ConvertBuyItem[]>();
+  for (const item of buyList) {
+    const fam = twinFamilyOfficial(item);
+    if (!fam) continue;
+    const key = `${item.kind}:${fam}`;
+    const g = groups.get(key) ?? [];
+    g.push(item);
+    groups.set(key, g);
+  }
+  const out: ConvertBuyItem[] = [];
+  for (const items of groups.values()) {
+    if (items.length < 3) continue;
+    const sorted = [...items].sort((a, b) => twinSortKey(a) - twinSortKey(b));
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    if (min) out.push(min);
+    if (max && max.twinId !== min?.twinId) out.push(max);
+  }
+  return out;
+}
+
+function scoreKitCandidate(
+  kind: ConvertRow["kind"],
+  id: string,
+  source: KitSource,
+  doc: QuiverDoc,
+  buyList: ConvertBuyItem[],
+  next: NextSetup[],
+): number {
+  let s = 0;
+  if (source === "twin") s += 45;
+  else if (source === "next") s += 35;
+  else if (source === "cover") s += 30;
+  else if (source === "band") s += 20;
+  else s += 10;
+  const buy = buyList.find((b) => b.kind === kind && b.twinId === id);
+  if (buy) s += buy.covers.length * 22 + buy.covers.reduce((n, c) => n + (c.score ?? 40), 0) / 10;
+  if (kind === "front") {
+    const f = frontById(id);
+    if (!f) return s;
+    if (doc.disciplines.length && frontFitsDisciplines(f, doc.disciplines)) s += 22;
+    else if (doc.disciplines.length) s -= 28;
+    if (next.some((r) => r.front.id === id)) s += 12;
+    if (doc.goal && buy) {
+      for (const c of buy.covers) {
+        const owned = frontById(c.ownedId);
+        if (owned && frontGoalRetreats(owned, f, doc.goal)) s -= 16;
+      }
+    }
+  }
+  if (kind === "fuse" && (doc.goal === "tighter-turns" || doc.goal === "more-glide")) {
+    const fuse = fuseById(id);
+    if (fuse && buy) {
+      for (const c of buy.covers) {
+        const owned = fuseById(c.ownedId);
+        if (!owned || owned.fuse_length_mm == null || fuse.fuse_length_mm == null) continue;
+        if (doc.goal === "tighter-turns" && fuse.fuse_length_mm < owned.fuse_length_mm) s += 18;
+        if (doc.goal === "tighter-turns" && fuse.fuse_length_mm > owned.fuse_length_mm) s -= 18;
+        if (doc.goal === "more-glide" && fuse.fuse_length_mm > owned.fuse_length_mm) s += 18;
+        if (doc.goal === "more-glide" && fuse.fuse_length_mm < owned.fuse_length_mm) s -= 18;
+      }
+    }
+    if (next.some((r) => r.fuse.id === id)) s += 16;
+  }
+  if (kind === "tail") {
+    const t = tailById(id);
+    const roles = [
+      ...new Set(doc.disciplines.map((d) => WANT_TAIL[d]).filter((r): r is TailWing["role"] => !!r)),
+    ];
+    if (t && roles.length && roles.includes(t.role)) s += 20;
+    else if (t && roles.length) s -= 10;
+    if (next.some((r) => r.tail.id === id)) s += 12;
+  }
+  if (kind === "mast") {
+    const m = mastById(id);
+    if (m?.motorIntegrated) s -= 40;
+    const band = MAST_BAND[preferredDiscipline(doc)];
+    if (m && (m.length_mm ?? 0) >= band.min) s += 24;
+    else if (m) s -= 12;
+  }
+  return s;
+}
+
+function pickBestId(
+  kind: ConvertRow["kind"],
+  candidates: { id: string; source: KitSource }[],
+  doc: QuiverDoc,
+  buyList: ConvertBuyItem[],
+  next: NextSetup[],
+): string | null {
+  const seen = new Set<string>();
+  let best: { id: string; score: number } | null = null;
+  for (const c of candidates) {
+    if (!c.id || seen.has(c.id)) continue;
+    seen.add(c.id);
+    const score = scoreKitCandidate(kind, c.id, c.source, doc, buyList, next);
+    if (!best || score > best.score) best = { id: c.id, score };
+  }
+  return best?.id ?? null;
+}
+
+function pickCompleteKit(args: {
+  doc: QuiverDoc;
+  from: Brand;
+  to: Brand;
+  buyList: ConvertBuyItem[];
+  checked: { frontIds: string[]; tailIds: string[]; fuseIds: string[]; mastIds: string[] };
+}): { kit: ConvertBuyItem[]; next: NextSetup[] } {
+  const { doc, from, to, buyList, checked } = args;
+  const seed = inferSeedSetup(doc, from);
+  const twin = seed ? bestConvertTwin(seed, doc) : null;
+  const disc = preferredDiscipline(doc, twin?.front);
+  const next = twin
+    ? nextSetups(twin.setup, doc.level ?? "comfortable", disc, doc.goal ?? "more-speed")
+    : [];
+  const covering = (kind: ConvertRow["kind"]) => buyList.filter((b) => b.kind === kind);
+
+  const frontCands: { id: string; source: KitSource }[] = [];
+  if (twin) frontCands.push({ id: twin.front.id, source: "twin" });
+  for (const b of covering("front")) frontCands.push({ id: b.twinId, source: "cover" });
+  const laneFront = pickFrontForLane(to, disciplineLanes(doc), midAreaOf(ownedFronts(doc)));
+  if (laneFront) frontCands.push({ id: laneFront.id, source: "lane" });
+
+  const fuseCands: { id: string; source: KitSource }[] = [];
+  if (doc.goal === "tighter-turns" || doc.goal === "more-glide") {
+    const nextFuse = next.find(
+      (r) => twin && r.fuse.id !== twin.fuse.id && (r.stepLabel.includes("fuse") || r.jump === "small"),
+    );
+    if (nextFuse) fuseCands.push({ id: nextFuse.fuse.id, source: "next" });
+  }
+  if (twin) fuseCands.push({ id: twin.fuse.id, source: "twin" });
+  for (const b of covering("fuse")) fuseCands.push({ id: b.twinId, source: "cover" });
+  const fallbackFuse = defaultFuse(to, doc.goal);
+  if (fallbackFuse) fuseCands.push({ id: fallbackFuse.id, source: "lane" });
+
+  const tailCands: { id: string; source: KitSource }[] = [];
+  const nextTail = next.find(
+    (r) => twin && r.tail.id !== twin.tail.id && r.stepLabel.includes("tail") && r.jump === "small",
+  );
+  if (nextTail) tailCands.push({ id: nextTail.tail.id, source: "next" });
+  if (twin) tailCands.push({ id: twin.tail.id, source: "twin" });
+  for (const b of covering("tail")) tailCands.push({ id: b.twinId, source: "cover" });
+  const wantRole = WANT_TAIL[disc];
+  if (wantRole) {
+    const t = pickTailRole(to, wantRole, []);
+    if (t) tailCands.push({ id: t.id, source: "lane" });
+  } else {
+    const t = catalog.tails.find((x) => x.brand === to);
+    if (t) tailCands.push({ id: t.id, source: "lane" });
+  }
+
+  const mastCands: { id: string; source: KitSource }[] = [];
+  const band = MAST_BAND[disc];
+  for (const b of covering("mast")) mastCands.push({ id: b.twinId, source: "cover" });
+  const ownedM = ownedMasts(doc).filter((m) => !m.motorIntegrated);
+  const bandOk = ownedM.filter((m) => (m.length_mm ?? 0) >= band.min);
+  const srcMast = [...(bandOk.length ? bandOk : ownedM)].sort(
+    (a, b) => (b.length_mm ?? 0) - (a.length_mm ?? 0),
+  )[0];
+  if (srcMast) {
+    const mt = nearestMast(srcMast.id);
+    if (mt && !mt.motorIntegrated) mastCands.push({ id: mt.id, source: "twin" });
+    if (srcMast.length_mm != null) {
+      const pool = catalog.masts.filter(
+        (m) => m.brand === to && !m.motorIntegrated && (m.length_mm ?? 0) >= band.min,
+      );
+      const near = [...pool].sort(
+        (a, b) =>
+          Math.abs((a.length_mm ?? 0) - srcMast.length_mm!) -
+          Math.abs((b.length_mm ?? 0) - srcMast.length_mm!),
+      )[0];
+      if (near) mastCands.push({ id: near.id, source: "twin" });
+    }
+  }
+  const bandMast = pickMastForKit(to, disc);
+  if (bandMast) mastCands.push({ id: bandMast.id, source: "band" });
+
+  const kit: ConvertBuyItem[] = [];
+  const addKind = (kind: ConvertRow["kind"], id: string | null, kindChecked: boolean) => {
+    if (!id) return;
+    const item = buyFromId(kind, id, buyList, kindChecked);
+    if (item) kit.push(item);
+  };
+  addKind("front", pickBestId("front", frontCands, doc, buyList, next), checked.frontIds.length > 0);
+  addKind("tail", pickBestId("tail", tailCands, doc, buyList, next), checked.tailIds.length > 0);
+  addKind("fuse", pickBestId("fuse", fuseCands, doc, buyList, next), checked.fuseIds.length > 0);
+  addKind("mast", pickBestId("mast", mastCands, doc, buyList, next), checked.mastIds.length > 0);
+  return { kit, next };
+}
+
+function ensureKitKinds(
+  items: ConvertBuyItem[],
+  kit: ConvertBuyItem[],
+) {
+  for (const kind of ["front", "tail", "fuse", "mast"] as const) {
+    if (items.some((i) => i.kind === kind)) continue;
+    const fallback = kit.find((i) => i.kind === kind);
+    if (fallback) upsertBuy(items, fallback);
+  }
+}
+
+function riderContext(doc: QuiverDoc): string {
+  const discs = (doc.disciplines.length ? doc.disciplines : ["wing"]).join("/");
+  const level = doc.level ?? "comfortable";
+  const goal = doc.goal ?? "more-speed";
+  return `${discs}, ${level}, ${goal}`;
+}
+
 function snapshotCoverageTier(
-  greedy: ConvertBuyItem[],
+  items: ConvertBuyItem[],
   ownedIds: string[],
   pct: 80 | 90,
-  to: Brand,
+  note: string,
 ): ConvertCoverageTier {
-  const totalOwned = ownedIds.length;
-  const target = totalOwned ? Math.ceil((pct / 100) * totalOwned) : 0;
-  const items: ConvertBuyItem[] = [];
-  const covered = new Set<string>();
-  for (const item of greedy) {
-    if (covered.size >= target) break;
-    const fresh = item.covers.filter((c) => !covered.has(c.ownedId));
-    if (!fresh.length) continue;
-    items.push({ ...item, covers: fresh });
-    for (const c of fresh) covered.add(c.ownedId);
+  const covered = coveredOwnedIds(items, ownedIds);
+  return {
+    pct,
+    items: sortBuys(items),
+    coveredOwned: covered.size,
+    totalOwned: ownedIds.length,
+    note,
+  };
+}
+
+function buildCoverageTiers(args: {
+  doc: QuiverDoc;
+  from: Brand;
+  to: Brand;
+  buyList: ConvertBuyItem[];
+  ownedIds: string[];
+  checked: { frontIds: string[]; tailIds: string[]; fuseIds: string[]; mastIds: string[] };
+}): ConvertCoverageTier[] {
+  const { doc, from, to, buyList, ownedIds, checked } = args;
+  const { kit, next } = pickCompleteKit({ doc, from, to, buyList, checked });
+  const greedy = greedySetCover(buyList, ownedIds);
+  const mids = paddedFamilyMids(buyList);
+  const target80 = ownedIds.length ? Math.ceil(0.8 * ownedIds.length) : 0;
+  const target90 = ownedIds.length ? Math.ceil(0.9 * ownedIds.length) : 0;
+  const toName = brandName(to);
+  const ctx = riderContext(doc);
+
+  const items80: ConvertBuyItem[] = [];
+  for (const item of kit) upsertBuy(items80, item);
+  for (const mm of paddedFamilyMinMax(buyList)) {
+    if (mm.kind === "front") upsertBuy(items80, mm);
   }
-  const coveredOwned = covered.size;
-  let note: string;
-  if (!totalOwned) {
-    note = "No checked parts to cover.";
-  } else if (coveredOwned < target) {
-    const actual = Math.round((coveredOwned / totalOwned) * 100);
-    note = `Covered ${coveredOwned}/${totalOwned} included parts (${actual}%). Some checked items have no published ${brandName(to)} twin.`;
+  const kept80 = items80.filter((i) => !mids.has(buyKey(i)));
+  items80.length = 0;
+  for (const item of kept80) items80.push(item);
+  ensureKitKinds(items80, kit);
+
+  for (const g of greedy) {
+    if (coveredOwnedIds(items80, ownedIds).size >= target80) break;
+    if (mids.has(buyKey(g))) continue;
+    if (g.kind !== "front") continue;
+    if (doc.disciplines.length) {
+      const f = frontById(g.twinId);
+      if (f && !frontFitsDisciplines(f, doc.disciplines)) continue;
+    }
+    upsertBuy(items80, g);
+  }
+  ensureKitKinds(items80, kit);
+
+  const items90 = items80.map(cloneBuy);
+  for (const g of greedy) {
+    if (coveredOwnedIds(items90, ownedIds).size >= target90) break;
+    upsertBuy(items90, g);
+  }
+
+  let extra = 0;
+  for (const r of next) {
+    if (extra >= 2) break;
+    const parts: { kind: ConvertRow["kind"]; id: string }[] = [
+      { kind: "front", id: r.front.id },
+      { kind: "fuse", id: r.fuse.id },
+      { kind: "tail", id: r.tail.id },
+    ];
+    for (const p of parts) {
+      if (items90.some((i) => i.kind === p.kind && i.twinId === p.id)) continue;
+      const item = buyFromId(p.kind, p.id, buyList, true);
+      if (!item) continue;
+      if (item.kitOnly || item.covers.length === 0) {
+        item.kitOnly = false;
+        item.note = `Further progression (${doc.goal ?? "goal"}): ${r.headline}`;
+      }
+      upsertBuy(items90, item);
+      extra += 1;
+      if (extra >= 2) break;
+    }
+  }
+  ensureKitKinds(items90, kit);
+
+  const covered80 = coveredOwnedIds(items80, ownedIds).size;
+  const covered90 = coveredOwnedIds(items90, ownedIds).size;
+  const total = ownedIds.length;
+  const kitBit = "Complete rideable kit (front, tail, fuse, mast).";
+  let note80: string;
+  if (!total) {
+    note80 = `${kitBit} Simplified progression kit for ${ctx} — no checked parts to cover.`;
   } else {
-    const actual = Math.round((coveredOwned / totalOwned) * 100);
-    note = `Covered ${coveredOwned}/${totalOwned} included parts (${actual}%) with ${items.length} unique ${brandName(to)} buy${items.length === 1 ? "" : "s"}.`;
+    const actual = Math.round((covered80 / total) * 100);
+    note80 = `${kitBit} Simplified progression kit for ${ctx}: ${items80.length} unique ${toName} buy${
+      items80.length === 1 ? "" : "s"
+    } covering ${covered80}/${total} checked parts (${actual}%). Prefers fewer overlapping sizes; min–max pair when a family would pad.`;
   }
-  return { pct, items, coveredOwned, totalOwned, note };
+  let note90: string;
+  if (!total) {
+    note90 = `${kitBit} Fuller coverage / further progression for ${ctx} — extends the simplified kit.`;
+  } else {
+    const actual = Math.round((covered90 / total) * 100);
+    note90 = `${kitBit} Fuller coverage / further progression for ${ctx}: ${items90.length} unique ${toName} buy${
+      items90.length === 1 ? "" : "s"
+    } covering ${covered90}/${total} checked parts (${actual}%), plus remaining outliers and extra goal steps.`;
+  }
+
+  return [
+    snapshotCoverageTier(items80, ownedIds, 80, note80),
+    snapshotCoverageTier(items90, ownedIds, 90, note90),
+  ];
 }
 
 function buildRangeSummaries(
@@ -991,11 +1514,14 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
     });
 
   const ownedIds = rows.map((r) => r.ownedId);
-  const greedy = greedySetCover(buyList, ownedIds);
-  const coverageTiers: ConvertCoverageTier[] = [
-    snapshotCoverageTier(greedy, ownedIds, 80, to),
-    snapshotCoverageTier(greedy, ownedIds, 90, to),
-  ];
+  const coverageTiers = buildCoverageTiers({
+    doc,
+    from,
+    to,
+    buyList,
+    ownedIds,
+    checked: { frontIds, tailIds, fuseIds, mastIds },
+  });
   const rangeSummaries = buildRangeSummaries(buyList, coverageTiers);
 
   const uniqueOf = (kind: ConvertRow["kind"]) => buyList.filter((b) => b.kind === kind).length;
@@ -1036,23 +1562,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   const seed = inferSetup(doc, from);
   if (seed) {
     const src = resolveSetup(seed);
-    const twins = rankTwins(seed, 8);
-    const best = twins[0];
-    let twin = best;
-    if (src && twins.length && best) {
-      const ranked = [...twins].sort((a, b) => {
-        const pa = convertFrontPenalty(src.front, a.front, doc.goal, doc.disciplines);
-        const pb = convertFrontPenalty(src.front, b.front, doc.goal, doc.disciplines);
-        return pa - pb || b.total - a.total;
-      });
-      twin =
-        ranked.find((t) => {
-          const p = convertFrontPenalty(src.front, t.front, doc.goal, doc.disciplines);
-          return p === 0 && t.total >= best.total - 8;
-        }) ??
-        ranked[0] ??
-        best;
-    }
+    const twin = bestConvertTwin(seed, doc);
     if (twin) {
       const pathWhy = twin.why.slice(0, 3);
       if (src && convertFrontPenalty(src.front, twin.front, doc.goal, doc.disciplines) > 0) {

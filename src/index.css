@@ -910,6 +910,16 @@ input {
 .buy-item.overlap {
   border-color: var(--arm);
 }
+.buy-item.kit {
+  border-style: dashed;
+}
+.kit-tag {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 560;
+}
 .convert-tier {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -923,6 +933,12 @@ input {
 .convert-tier h3 {
   margin: 0 0 4px;
   font-size: 14px;
+}
+.convert-tier h3 .sub {
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 12px;
 }
 .convert-tier-meta {
   font-size: 12px;
