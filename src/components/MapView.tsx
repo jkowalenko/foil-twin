@@ -8,7 +8,7 @@ import {
 } from "../data/catalog";
 import type { FrontFamilyId, FrontWing } from "../data/types";
 import { n, shortFront } from "../lib/format";
-import { arClass, rankFrontTwins } from "../lib/match";
+import { MIN_MAP_FRONT, arClass, rankFrontTwins } from "../lib/match";
 import { BrandMark } from "./BrandMark";
 
 type YMode = "ar" | "span";
@@ -61,7 +61,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
   const hovered = hoverId ? frontById(hoverId) : undefined;
   const selectedClass = selected ? arClass(selected) : null;
   const twins = selected
-    ? rankFrontTwins(selected, 5, { sameArClass: true })
+    ? rankFrontTwins(selected, 5, { sameArClass: true, minScore: MIN_MAP_FRONT })
     : [];
   const twinIds = new Set(twins.map((t) => t.front.id));
   const pickerFronts = FRONT_FAMILY_ORDER.flatMap((fid) =>
@@ -341,7 +341,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
               {selected && <BrandMark brand={selected.brand} size="sm" />}
               Part compare
             </h2>
-            <div className="sub">Nearest other-brand fronts in the same AR class</div>
+            <div className="sub">Same AR class and ≥66% only</div>
           </div>
         </div>
         <div className="panel-b compare-front">
@@ -363,7 +363,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 <p className="note">
                   {selectedClass == null
                     ? "No published aspect ratio, so this wing is not paired across AR classes."
-                    : `No other-brand fronts in the ${selectedClass} AR class.`}
+                    : `No other-brand fronts in the ${selectedClass} AR class at ≥${MIN_MAP_FRONT}%.`}
                 </p>
               )}
               {twins.map((t) => (

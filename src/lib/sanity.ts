@@ -4,6 +4,7 @@ import type { Goal, Setup } from "../data/types";
 import { frontTitle } from "./format";
 import {
   MIN_FRONT_TWIN,
+  MIN_MAP_FRONT,
   arClass,
   describeTwin,
   rankFrontTwins,
@@ -321,7 +322,7 @@ if (twinFloorFail) {
   throw new Error(`Twin page front floor failed ${twinFloorFail} check(s)`);
 }
 
-section("Map AR class bands (same-class part-compare only)");
+section(`Map AR class bands + ≥${MIN_MAP_FRONT}% (same-class part-compare)`);
 const bandSamples: { ar: number | null; want: ReturnType<typeof arClass> }[] = [
   { ar: null, want: null },
   { ar: 8.99, want: "carve" },
@@ -342,17 +343,29 @@ if (sameArClass({ aspect_ratio: null }, { aspect_ratio: 10 })) {
   arFail += 1;
 }
 for (const f of catalog.fronts) {
-  const twins = rankFrontTwins(f, 12, { sameArClass: true });
+  const twins = rankFrontTwins(f, 12, {
+    sameArClass: true,
+    minScore: MIN_MAP_FRONT,
+  });
   for (const t of twins) {
     if (!sameArClass(f, t.front)) {
       console.log(`FAIL map twin ${f.id} → ${t.front.id} crosses AR class`);
+      arFail += 1;
+    }
+    if (t.score < MIN_MAP_FRONT) {
+      console.log(
+        `FAIL map twin ${f.id} → ${t.front.id} score ${t.score.toFixed(1)} < ${MIN_MAP_FRONT}`,
+      );
       arFail += 1;
     }
   }
 }
 const spit1180 = catalog.fronts.find((f) => f.id === "axis-spitfire-1180")!;
 const spitOpen = rankFrontTwins(spit1180, 8);
-const spitMap = rankFrontTwins(spit1180, 8, { sameArClass: true });
+const spitMap = rankFrontTwins(spit1180, 8, {
+  sameArClass: true,
+  minScore: MIN_MAP_FRONT,
+});
 const spitCross = spitOpen.filter((t) => !sameArClass(spit1180, t.front));
 console.log(
   `Spitfire 1180 is ${arClass(spit1180)}; unrestricted top-8 has ${spitCross.length} other-class; map lists ${spitMap.map((t) => `${t.front.familyOfficial} ${t.front.sizeLabel}`).join(", ") || "none"}`,
@@ -361,8 +374,12 @@ if (spitMap.some((t) => arClass(t.front) !== "mid")) {
   console.log("FAIL Spitfire 1180 map twins must stay mid AR class");
   arFail += 1;
 }
+if (spitMap.some((t) => t.score < MIN_MAP_FRONT)) {
+  console.log(`FAIL Spitfire 1180 map twins must be ≥${MIN_MAP_FRONT}%`);
+  arFail += 1;
+}
 console.log(
-  `arClass bands ok; map same-class twins checked across ${catalog.fronts.length} fronts, fails=${arFail}`,
+  `arClass bands ok; map same-class ≥${MIN_MAP_FRONT}% twins checked across ${catalog.fronts.length} fronts, fails=${arFail}`,
 );
 if (arFail) {
   throw new Error(`Map AR class checks failed ${arFail}`);

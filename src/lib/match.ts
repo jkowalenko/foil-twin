@@ -77,6 +77,9 @@ export type ArClass = "carve" | "mid" | "high";
  */
 export const MIN_FRONT_TWIN = 75;
 
+/** Map part-compare: same AR class and front score at least this (0–100). */
+export const MIN_MAP_FRONT = 66;
+
 /** carve: AR < 9; mid: 9 ≤ AR < 11.5; high: AR ≥ 11.5. Null AR has no class. */
 export function arClass(wing: { aspect_ratio: number | null }): ArClass | null {
   const ar = wing.aspect_ratio;
@@ -402,7 +405,7 @@ export function rankTwins(
 export function rankFrontTwins(
   from: FrontWing,
   limit = 6,
-  opts?: { sameArClass?: boolean },
+  opts?: { sameArClass?: boolean; minScore?: number },
 ): FrontTwin[] {
   const others = catalog.fronts.filter((f) => f.brand !== from.brand);
   const ranked: FrontTwin[] = [];
@@ -410,6 +413,7 @@ export function rankFrontTwins(
     if (opts?.sameArClass && !sameArClass(from, f)) continue;
     const s = scoreFrontPair(from, f);
     if (s.score == null) continue;
+    if (opts?.minScore != null && s.score * 100 < opts.minScore) continue;
     ranked.push({
       front: f,
       score: s.score * 100,

@@ -6,7 +6,7 @@ Scores are 0–100. Front is 62% of a complete-setup score, tail 23%, fuse 15%. 
 
 The Twin page lists a complete setup only when the **front wing** pair is ≥ 75% (`MIN_FRONT_TWIN`). Overall score is still shown and used to rank.
 
-Map part-compare only pairs other-brand fronts in the same AR class (`arClass()`): carve AR < 9.0, mid 9.0 ≤ AR < 11.5, high AR ≥ 11.5. Null AR is excluded from cross-class pairing. Twin / Quiver ranking is otherwise unchanged. Progress now ladders small → bigger by skill (fuse/tail, then one-size front, then related family) while staying strict-forward on the goal.
+Map part-compare only pairs other-brand fronts in the same AR class (`arClass()`): carve AR < 9.0, mid 9.0 ≤ AR < 11.5, high AR ≥ 11.5, and only if the front score is ≥ 66% (`MIN_MAP_FRONT`). Null AR is excluded from cross-class pairing. Twin / Quiver ranking is otherwise unchanged. Progress now ladders small → bigger by skill (fuse/tail, then one-size front, then related family) while staying strict-forward on the goal.
 
 ## What the matcher thinks is close
 
