@@ -26,7 +26,7 @@ Hash routes: `#twin` `#map` `#progress` `#quiver`.
 
 - **Map** — every v1 front wing on area (log) vs aspect ratio or span. Color by family. Hover a point for name + area/span/AR. Pick a wing from the top-right menu or click a point; both drive **part compare**. Part compare only lists nearest other-brand fronts in the **same AR class** (carve / mid / high).
 - **Twin** — build a complete setup, see the spec stack, and rank other-brand **twin setups** (front + fuse + tail) with a plain-language why. Brand selectors are logos only. Only complete setups whose **front wing** is at **75% match or better** are listed (overall score is still shown and used to rank); if none clear that bar, the right panel says so. Results are grouped by front wing; fuse/tail variants sit under the best complete setup.
-- **Progress** — current setup + rider level + discipline + goal → up to **3** next setups on the **same brand** as a carousel (best first). Recommendations must **strictly advance** the chosen goal (never a backwards move on that goal's primary axis). If fewer than 3 strict-forward options exist, fewer are shown. The other-brand twin is for the **active** slide.
+- **Progress** — current setup + rider level + discipline + goal → up to **3** next setups on the **same brand** as a carousel, ordered **small → bigger** (fuse/tail first, then a one-size front, then a larger or family step if skill allows). Recommendations must **strictly advance** the chosen goal (never a backwards move on that goal's primary axis). If fewer than 3 strict-forward options exist, fewer are shown. The other-brand twin is for the **active** slide.
 - **Quiver** — browser-only inventory (masts, fuses, fronts, tails) plus named complete setups. Multi-discipline gap check, same-brand buy suggestions, and a brand-convert map: each owned part can be included or excluded (default: all included). Unchecked items are left out of the buy list and overlap math. Checked items produce a unique other-brand buy list with overlap savings. Multiple owned fronts that map to the same other-brand front at **≥ 85% front match** are collapsed.
 
 Theme defaults to **dark**. The header toggle persists `foil-twin-theme` in localStorage (`dark` | `light`).
@@ -121,9 +121,21 @@ Recommendations are **strict-forward** on the chosen goal. They never recommend 
 - **More glide** — higher aspect ratio and/or a higher-AR family; never lower AR
 - **Smaller size** — smaller front area; never larger
 
-Up to 3, best first. If fewer strict-forward options exist, the carousel is shorter — it does not pad with backwards moves.
+Up to 3, **small → bigger**. If fewer strict-forward options exist, the carousel is shorter — it does not pad with backwards moves or with jumps that are too big for the rider level.
 
-Learning stays on one size step. Pushing may skip a size. A **big** jump is flagged when area changes by more than ~22%.
+Jump size is about **what changed**, not just area:
+
+- **Small** — fuse-only or tail-only in the goal direction (shorter fuse for tighter turns; longer fuse for glide feel; smaller/speed-role tail for more speed; dart/progressive tail for tighter turns).
+- **Medium** — one size step in the same family, still in the goal direction.
+- **Bigger** — a further same-family size skip, or a related-family / AR-class move.
+
+Skill caps:
+
+- **Learning** — fuse/tail, or at most one same-family size. Never a family jump. Never a big area skip.
+- **Comfortable** — slide 1 is usually fuse/tail; slide 2 a one-size front; slide 3 can be a slightly larger front still in the same AR class or a related family.
+- **Pushing** — slide 1 is still a small change; a bigger front or family jump only as a later slide.
+
+A **bigger** step is also flagged when the front family changes. Area jumps over ~22% are called out in the why-text.
 
 ## Quiver storage
 

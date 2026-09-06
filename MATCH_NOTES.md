@@ -6,7 +6,7 @@ Scores are 0–100. Front is 62% of a complete-setup score, tail 23%, fuse 15%. 
 
 The Twin page lists a complete setup only when the **front wing** pair is ≥ 75% (`MIN_FRONT_TWIN`). Overall score is still shown and used to rank.
 
-Map part-compare only pairs other-brand fronts in the same AR class (`arClass()`): carve AR < 9.0, mid 9.0 ≤ AR < 11.5, high AR ≥ 11.5. Null AR is excluded from cross-class pairing. Twin / Progress / Quiver ranking is otherwise unchanged.
+Map part-compare only pairs other-brand fronts in the same AR class (`arClass()`): carve AR < 9.0, mid 9.0 ≤ AR < 11.5, high AR ≥ 11.5. Null AR is excluded from cross-class pairing. Twin / Quiver ranking is otherwise unchanged. Progress now ladders small → bigger by skill (fuse/tail, then one-size front, then related family) while staying strict-forward on the goal.
 
 ## What the matcher thinks is close
 
@@ -37,13 +37,24 @@ Map part-compare only pairs other-brand fronts in the same AR class (`arClass()`
 
 ### Progression sample
 
-ART v2 879, comfortable, wing, more speed — **strict-forward** only (never larger area). Up to 3; fewer if nothing else advances the goal.
+ART v2 879 + Ultra Short + Skinny 360/45, wing, more speed — **strict-forward** only (never larger area). Carousel is **small → bigger**, capped by skill. Fuse/tail count as a forward step when they move the goal (smaller/speed-role tail for speed; shorter fuse for tighter turns; longer fuse for glide).
 
-1. Drop to ART v2 **819** — flagged **big** (~18% less area, 790 → 647 cm²). Twin: HA 680 + TC60 + Speed 180.
-2. Move into **Fireball 880** (604 cm², AR 12.82) — higher-speed family, smaller area.
-3. Move into **Fireball 940** (689 cm², AR 12.84) — same family step, still smaller than 790 cm².
+**Learning** (2 slides — no family jump, so not padded to 3):
 
-A Fireball with *more* area than 790 cm² is not recommended for this goal. 879 → 819 is a real size skip in feel even though it is the next ART v2. Recommendations are not padded with backwards moves.
+1. Same front, smaller Skinny **359/40** — **small · tail**. Twin: HA 780 + TC60 + Speed 180.
+2. Stay in ART v2, drop to **819** — **medium · front (one size)** (790 → 647 cm²). Twin: HA 680 + TC60 + Speed 180.
+
+Slide 1 is not Fireball. Learning never gets a family leap.
+
+**Comfortable:**
+
+1. Skinny **359/40** — small tail step.
+2. ART v2 **819** — one size down, same family.
+3. **Fireball 1000** (773 cm², AR 12.95) — related higher-speed family at similar area. Twin: UHA 770 + TC60 + Speed 180.
+
+**Pushing:** slides 1–2 same as comfortable; slide 3 is **Fireball 880** (604 cm², AR 12.82) — the same family leap, further down in area.
+
+A Fireball with *more* area than 790 cm² is not recommended for this goal. Recommendations are not padded with backwards moves or with jumps that are too big for the rider level.
 
 ## Parts we could not source (null in the catalog)
 

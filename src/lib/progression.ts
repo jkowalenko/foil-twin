@@ -1,4 +1,4 @@
-import { catalog, frontById } from "../data/catalog";
+import { catalog } from "../data/catalog";
 import type {
   Discipline,
   FrontWing,
@@ -6,9 +6,11 @@ import type {
   Goal,
   RiderLevel,
   Setup,
+  TailFamilyId,
+  TailRole,
   TailWing,
 } from "../data/types";
-import { rankTwins, resolveSetup, type TwinMatch } from "./match";
+import { rankTwins, resolveSetup, sameArClass, type TwinMatch } from "./match";
 
 export type NextSetup = {
   setup: Setup;
@@ -18,12 +20,22 @@ export type NextSetup = {
   headline: string;
   why: string[];
   jump: "small" | "medium" | "big";
+  /** What actually changed: fuse, tail, and/or front. */
+  stepLabel: string;
   otherBrandTwin: TwinMatch | null;
 };
 
-function areaOf(id: string): number | null {
-  return frontById(id)?.area_cm2 ?? null;
-}
+type Pieces = { front: FrontWing; fuse: Fuselage; tail: TailWing };
+
+type StepTier = 0 | 1 | 2 | 3;
+
+type Idea = Pieces & {
+  headline: string;
+  why: string[];
+  jump: NextSetup["jump"];
+  stepLabel: string;
+  tier: StepTier;
+};
 
 function jumpFromArea(from: number | null, to: number | null): NextSetup["jump"] {
   if (from == null || to == null) return "medium";
@@ -31,6 +43,10 @@ function jumpFromArea(from: number | null, to: number | null): NextSetup["jump"]
   if (r < Math.log(1.1)) return "small";
   if (r < Math.log(1.22)) return "medium";
   return "big";
+}
+
+function jumpRank(j: NextSetup["jump"]): number {
+  return j === "small" ? 0 : j === "medium" ? 1 : 2;
 }
 
 function sameFamilyFronts(front: FrontWing): FrontWing[] {
@@ -51,17 +67,17 @@ function skipOne(front: FrontWing, direction: "down" | "up"): FrontWing | null {
   const list = sameFamilyFronts(front);
   const i = list.findIndex((f) => f.id === front.id);
   if (i < 0) return null;
-  if (direction === "down") return list[i + 2] ?? list[i + 1] ?? null;
-  return list[i - 2] ?? list[i - 1] ?? null;
+  if (direction === "down") return list[i + 2] ?? null;
+  return list[i - 2] ?? null;
 }
 
-type FamilyLane = "carve" | "surf" | "allround" | "glide";
-
-function lane(f: FrontWing): FamilyLane {
-  if (f.familyId === "spitfire" || f.familyId === "ma-mk2") return "carve";
-  if (f.familyId === "surge") return "surf";
-  if (f.familyId === "fireball" || f.familyId === "uha") return "glide";
-  return "allround";
+function sizeDistance(from: FrontWing, to: FrontWing): number | null {
+  if (from.familyId !== to.familyId || from.brand !== to.brand) return null;
+  const list = sameFamilyFronts(from);
+  const i = list.findIndex((f) => f.id === from.id);
+  const j = list.findIndex((f) => f.id === to.id);
+  if (i < 0 || j < 0) return null;
+  return Math.abs(i - j);
 }
 
 /**
@@ -95,7 +111,97 @@ function glideFamilyRank(f: FrontWing): number {
   return speedFamilyRank(f);
 }
 
-type Pieces = { front: FrontWing; fuse: Fuselage; tail: TailWing };
+function speedTailRank(t: TailWing): number {
+  if (t.role === "speed") return 2;
+  if (t.role === "dart") return 1;
+  return 0;
+}
+
+function carveTailRank(t: TailWing): number {
+  if (t.role === "dart") return 2;
+  if (t.role === "surf") return 1;
+  return 0;
+}
+
+const AR_STEP = 0.15;
+
+function violatesHardNever(from: Pieces, to: Pieces, goal: Goal): boolean {
+  const a0 = from.front.area_cm2;
+  const a1 = to.front.area_cm2;
+  const ar0 = from.front.aspect_ratio;
+  const ar1 = to.front.aspect_ratio;
+  const l0 = from.fuse.fuse_length_mm;
+  const l1 = to.fuse.fuse_length_mm;
+
+  if (goal === "more-speed" || goal === "smaller-size") {
+    if (a0 != null && a1 != null && a1 > a0) return true;
+  }
+  if (goal === "more-lift") {
+    if (a0 != null && a1 != null && a1 < a0) return true;
+  }
+  if (goal === "tighter-turns") {
+    if (l0 != null && l1 != null && l1 > l0) return true;
+  }
+  if (goal === "more-glide") {
+    if (ar0 != null && ar1 != null && ar1 < ar0) return true;
+  }
+  return false;
+}
+
+function frontAdvances(from: Pieces, to: Pieces, goal: Goal): boolean {
+  if (from.front.id === to.front.id) return false;
+  const a0 = from.front.area_cm2;
+  const a1 = to.front.area_cm2;
+  const ar0 = from.front.aspect_ratio;
+  const ar1 = to.front.aspect_ratio;
+
+  if (goal === "more-speed") {
+    const smaller = a0 != null && a1 != null && a1 < a0;
+    const fasterFam = speedFamilyRank(to.front) > speedFamilyRank(from.front);
+    return smaller || fasterFam;
+  }
+  if (goal === "more-lift") {
+    return a0 != null && a1 != null && a1 > a0;
+  }
+  if (goal === "tighter-turns") {
+    const lowerAr = ar0 != null && ar1 != null && ar1 < ar0 - AR_STEP;
+    const moreCarve = carveFamilyRank(to.front) > carveFamilyRank(from.front);
+    const smaller = a0 != null && a1 != null && a1 < a0;
+    return lowerAr || moreCarve || smaller;
+  }
+  if (goal === "more-glide") {
+    const higherAr = ar0 != null && ar1 != null && ar1 > ar0 + AR_STEP;
+    const higherFam = glideFamilyRank(to.front) > glideFamilyRank(from.front);
+    return higherAr || higherFam;
+  }
+  return a0 != null && a1 != null && a1 < a0;
+}
+
+function fuseAdvances(from: Pieces, to: Pieces, goal: Goal): boolean {
+  if (from.fuse.id === to.fuse.id) return false;
+  const l0 = from.fuse.fuse_length_mm;
+  const l1 = to.fuse.fuse_length_mm;
+  if (l0 == null || l1 == null) return false;
+  if (goal === "tighter-turns") return l1 < l0;
+  if (goal === "more-glide") return l1 > l0;
+  return false;
+}
+
+function tailAdvances(from: Pieces, to: Pieces, goal: Goal): boolean {
+  if (from.tail.id === to.tail.id) return false;
+  const a0 = from.tail.area_cm2;
+  const a1 = to.tail.area_cm2;
+  const smaller = a0 != null && a1 != null && a1 < a0;
+  const larger = a0 != null && a1 != null && a1 > a0;
+  if (goal === "more-speed" || goal === "more-glide") {
+    return smaller || speedTailRank(to.tail) > speedTailRank(from.tail);
+  }
+  if (goal === "tighter-turns") {
+    return smaller || carveTailRank(to.tail) > carveTailRank(from.tail);
+  }
+  if (goal === "more-lift") return larger;
+  return false;
+}
 
 /** True when `to` strictly advances `goal` and never reverses that goal's hard axis. */
 export function isStrictForward(from: Pieces, to: Pieces, goal: Goal): boolean {
@@ -106,38 +212,16 @@ export function isStrictForward(from: Pieces, to: Pieces, goal: Goal): boolean {
   ) {
     return false;
   }
-  const a0 = from.front.area_cm2;
-  const a1 = to.front.area_cm2;
-  const ar0 = from.front.aspect_ratio;
-  const ar1 = to.front.aspect_ratio;
-  const l0 = from.fuse.fuse_length_mm;
-  const l1 = to.fuse.fuse_length_mm;
+  if (violatesHardNever(from, to, goal)) return false;
+  return frontAdvances(from, to, goal) || fuseAdvances(from, to, goal) || tailAdvances(from, to, goal);
+}
 
-  if (goal === "more-speed") {
-    if (a0 != null && a1 != null && a1 > a0) return false;
-    const smaller = a0 != null && a1 != null && a1 < a0;
-    const fasterFam = speedFamilyRank(to.front) > speedFamilyRank(from.front);
-    return smaller || fasterFam;
-  }
-  if (goal === "more-lift") {
-    if (a0 != null && a1 != null && a1 < a0) return false;
-    return a0 != null && a1 != null && a1 > a0;
-  }
-  if (goal === "tighter-turns") {
-    if (l0 != null && l1 != null && l1 > l0) return false;
-    const shorter = l0 != null && l1 != null && l1 < l0;
-    const lowerAr = ar0 != null && ar1 != null && ar1 < ar0;
-    const moreCarve = carveFamilyRank(to.front) > carveFamilyRank(from.front);
-    return shorter || lowerAr || moreCarve;
-  }
-  if (goal === "more-glide") {
-    if (ar0 != null && ar1 != null && ar1 < ar0) return false;
-    const higherAr = ar0 != null && ar1 != null && ar1 > ar0;
-    const higherFam = glideFamilyRank(to.front) > glideFamilyRank(from.front);
-    return higherAr || higherFam;
-  }
-  if (a0 != null && a1 != null && a1 > a0) return false;
-  return a0 != null && a1 != null && a1 < a0;
+function familyRetreats(from: FrontWing, to: FrontWing, goal: Goal): boolean {
+  if (from.id === to.id) return false;
+  if (goal === "more-speed" && speedFamilyRank(to) < speedFamilyRank(from)) return true;
+  if (goal === "more-glide" && glideFamilyRank(to) < glideFamilyRank(from)) return true;
+  if (goal === "tighter-turns" && carveFamilyRank(to) < carveFamilyRank(from)) return true;
+  return false;
 }
 
 function familyShift(front: FrontWing, goal: Goal): FrontFamilyTarget | null {
@@ -199,7 +283,7 @@ function closestAreaInFamily(
   }
   if (!pool.length) return null;
   if (area == null) return pool[0] ?? null;
-  const target = bias === "down" ? area * 0.9 : bias === "up" ? area * 1.08 : area;
+  const target = bias === "down" ? area * 0.8 : bias === "up" ? area * 1.2 : area;
   return [...pool].sort(
     (a, b) =>
       Math.abs(Math.log((a.area_cm2 ?? target) / target)) -
@@ -207,12 +291,44 @@ function closestAreaInFamily(
   )[0];
 }
 
+function areaBoundFor(goal: Goal): "never-larger" | "never-smaller" | undefined {
+  if (goal === "more-speed" || goal === "smaller-size") return "never-larger";
+  if (goal === "more-lift") return "never-smaller";
+  return undefined;
+}
+
+function familyHopFront(
+  front: FrontWing,
+  goal: Goal,
+  hops: number,
+  aggression: "near" | "far",
+): FrontWing | null {
+  let cur = front;
+  for (let h = 0; h < hops; h++) {
+    const shift = familyShift(cur, goal);
+    if (!shift) return null;
+    const last = h === hops - 1;
+    const bias: "down" | "up" | "same" =
+      !last || aggression === "near"
+        ? "same"
+        : goal === "more-lift"
+          ? "up"
+          : goal === "more-glide"
+            ? "same"
+            : "down";
+    const next = closestAreaInFamily(shift.brand, shift.familyId, cur.area_cm2, bias, areaBoundFor(goal));
+    if (!next || next.id === cur.id) return null;
+    cur = next;
+  }
+  return cur.id === front.id ? null : cur;
+}
+
 function shorterFuse(current: Fuselage): Fuselage | null {
   const list = catalog.fuselages
     .filter((f) => f.brand === current.brand && f.fuse_length_mm != null)
     .sort((a, b) => (a.fuse_length_mm ?? 0) - (b.fuse_length_mm ?? 0));
   const i = list.findIndex((f) => f.id === current.id);
-  if (i <= 0) return list[0] ?? null;
+  if (i <= 0) return null;
   return list[i - 1] ?? null;
 }
 
@@ -222,7 +338,7 @@ function longerFuse(current: Fuselage): Fuselage | null {
     .sort((a, b) => (a.fuse_length_mm ?? 0) - (b.fuse_length_mm ?? 0));
   const i = list.findIndex((f) => f.id === current.id);
   if (i < 0) return null;
-  return list[i + 1] ?? list[i] ?? null;
+  return list[i + 1] ?? null;
 }
 
 function smallerTail(current: TailWing): TailWing | null {
@@ -239,22 +355,19 @@ function largerTail(current: TailWing): TailWing | null {
     .filter((t) => t.brand === current.brand && t.familyId === current.familyId)
     .sort((a, b) => (b.area_cm2 ?? 0) - (a.area_cm2 ?? 0));
   const i = list.findIndex((t) => t.id === current.id);
-  if (i <= 0) return list[0] ?? null;
+  if (i <= 0) return null;
   return list[i - 1] ?? null;
 }
 
-function disciplineTailHint(
-  brand: TailWing["brand"],
-  discipline: Discipline,
-): TailWing["familyId"] | null {
+function roleFamily(brand: TailWing["brand"], role: TailRole): TailFamilyId {
   if (brand === "axis") {
-    if (discipline === "surf" || discipline === "wake") return "skinny-surf";
-    if (discipline === "downwind" || discipline === "race") return "skinny";
-    return null;
+    if (role === "speed") return "skinny";
+    if (role === "dart") return "progressive";
+    return "skinny-surf";
   }
-  if (discipline === "surf" || discipline === "wake") return "surf";
-  if (discipline === "downwind" || discipline === "race") return "speed";
-  return null;
+  if (role === "speed") return "speed";
+  if (role === "dart") return "dart";
+  return "surf";
 }
 
 function pickTail(
@@ -274,13 +387,17 @@ function pickTail(
   )[0];
 }
 
-type Idea = {
-  front: FrontWing;
-  fuse: Fuselage;
-  tail: TailWing;
-  headline: string;
-  why: string[];
-};
+function goalTail(current: TailWing, goal: Goal): TailWing | null {
+  if (goal === "smaller-size") return null;
+  if (goal === "more-lift") return largerTail(current);
+  const wantRole: TailRole = goal === "tighter-turns" ? "dart" : "speed";
+  if (current.role !== wantRole) {
+    const dir = goal === "tighter-turns" ? "same" : "smaller";
+    const next = pickTail(current, roleFamily(current.brand, wantRole), dir);
+    return next.id === current.id ? null : next;
+  }
+  return smallerTail(current);
+}
 
 function ideaKey(idea: Pieces): string {
   return `${idea.front.id}|${idea.fuse.id}|${idea.tail.id}`;
@@ -307,6 +424,73 @@ function autoHeadline(src: Pieces, idea: Pieces): string {
   return `Same front, ${idea.tail.familyOfficial} ${idea.tail.sizeLabel}`;
 }
 
+function classify(src: Pieces, to: Pieces): Pick<Idea, "jump" | "stepLabel" | "tier"> {
+  const frontChanged = src.front.id !== to.front.id;
+  const fuseChanged = src.fuse.id !== to.fuse.id;
+  const tailChanged = src.tail.id !== to.tail.id;
+  const familyChanged = src.front.familyId !== to.front.familyId;
+
+  if (!frontChanged) {
+    const stepLabel =
+      fuseChanged && tailChanged ? "fuse + tail" : fuseChanged ? "fuse" : "tail";
+    return { jump: "small", stepLabel, tier: 0 };
+  }
+
+  if (familyChanged) {
+    const areaJump = jumpFromArea(src.front.area_cm2, to.front.area_cm2);
+    const famDelta = Math.abs(speedFamilyRank(to.front) - speedFamilyRank(src.front));
+    const sameClass = sameArClass(src.front, to.front);
+    const aggressive = famDelta >= 2 || (!sameClass && areaJump === "big");
+    return {
+      jump: "big",
+      stepLabel: "front (family)",
+      tier: aggressive ? 3 : 2,
+    };
+  }
+
+  const steps = sizeDistance(src.front, to.front) ?? 1;
+  const areaJump = jumpFromArea(src.front.area_cm2, to.front.area_cm2);
+  if (steps <= 1) {
+    return {
+      jump: areaJump === "small" ? "small" : "medium",
+      stepLabel: "front (one size)",
+      tier: 1,
+    };
+  }
+  if (steps === 2) {
+    return {
+      jump: areaJump === "big" ? "big" : "medium",
+      stepLabel: "front (same family)",
+      tier: 2,
+    };
+  }
+  return { jump: "big", stepLabel: "front (same family)", tier: 3 };
+}
+
+function stepLead(src: Pieces, idea: Pieces, jump: NextSetup["jump"], stepLabel: string): string {
+  const size = jump === "big" ? "Bigger" : jump === "medium" ? "Medium" : "Small";
+  if (stepLabel === "fuse") {
+    const shorter =
+      idea.fuse.fuse_length_mm != null &&
+      src.fuse.fuse_length_mm != null &&
+      idea.fuse.fuse_length_mm < src.fuse.fuse_length_mm;
+    return `${size} step — ${shorter ? "shorter" : "longer"} fuse only (${idea.fuse.sizeLabel}). Same front.`;
+  }
+  if (stepLabel === "tail") {
+    return `${size} step — tail only (${src.tail.familyOfficial} ${src.tail.sizeLabel} → ${idea.tail.familyOfficial} ${idea.tail.sizeLabel}). Same front.`;
+  }
+  if (stepLabel === "fuse + tail") {
+    return `${size} step — fuse and tail, same front.`;
+  }
+  if (stepLabel === "front (one size)") {
+    return `${size} step — one size in ${idea.front.familyOfficial} (${src.front.sizeLabel} → ${idea.front.sizeLabel}).`;
+  }
+  if (stepLabel === "front (same family)") {
+    return `${size} step — further size change in ${idea.front.familyOfficial} (${src.front.sizeLabel} → ${idea.front.sizeLabel}).`;
+  }
+  return `${size} step — ${idea.front.familyOfficial} family (${src.front.familyOfficial} ${src.front.sizeLabel} → ${idea.front.familyOfficial} ${idea.front.sizeLabel}).`;
+}
+
 function autoWhy(src: Pieces, idea: Pieces): string[] {
   const why: string[] = [];
   if (idea.front.id !== src.front.id) {
@@ -316,286 +500,215 @@ function autoWhy(src: Pieces, idea: Pieces): string[] {
     if (idea.front.familyId !== src.front.familyId) {
       why.push(`${nAR(src.front)} → ${nAR(idea.front)}.`);
     }
-  } else {
-    why.push("Same front wing.");
   }
   if (idea.fuse.id !== src.fuse.id) {
-    why.push(`Fuse ${src.fuse.sizeLabel} → ${idea.fuse.sizeLabel}.`);
+    const shorter =
+      idea.fuse.fuse_length_mm != null &&
+      src.fuse.fuse_length_mm != null &&
+      idea.fuse.fuse_length_mm < src.fuse.fuse_length_mm;
+    why.push(
+      `Fuse ${src.fuse.sizeLabel} → ${idea.fuse.sizeLabel}. ${
+        shorter
+          ? "Shorter fuse → more maneuverable, less pitch-stable."
+          : "Longer fuse → more tracking / glide feel, less twitchy."
+      }`,
+    );
   }
   if (idea.tail.id !== src.tail.id) {
+    const smaller =
+      idea.tail.area_cm2 != null &&
+      src.tail.area_cm2 != null &&
+      idea.tail.area_cm2 < src.tail.area_cm2;
+    const roleShift = idea.tail.role !== src.tail.role;
     why.push(
-      `Tail ${src.tail.familyOfficial} ${src.tail.sizeLabel} → ${idea.tail.familyOfficial} ${idea.tail.sizeLabel}.`,
+      `Tail ${src.tail.familyOfficial} ${src.tail.sizeLabel} → ${idea.tail.familyOfficial} ${idea.tail.sizeLabel}.` +
+        (roleShift
+          ? idea.tail.role === "dart"
+            ? " Dart/progressive role → looser yaw, quicker carve."
+            : idea.tail.role === "speed"
+              ? " Speed/skinny role → less tail drag, more locked yaw."
+              : ""
+          : smaller
+            ? " Smaller tail → looser yaw, a bit less drag."
+            : " Larger tail → more support / pitch stability."),
     );
   }
   return why;
 }
 
-function rankScore(src: Pieces, idea: Pieces, goal: Goal, level: RiderLevel): number {
-  const a0 = src.front.area_cm2;
-  const a1 = idea.front.area_cm2;
-  const ar0 = src.front.aspect_ratio;
-  const ar1 = idea.front.aspect_ratio;
-  const l0 = src.fuse.fuse_length_mm;
-  const l1 = idea.fuse.fuse_length_mm;
-  const jump = jumpFromArea(a0, a1);
-  let s = 0;
-  if (level === "learning" && jump === "big") s -= 4;
-  if (level === "learning" && jump === "medium") s -= 1;
-
-  if (goal === "more-speed" || goal === "smaller-size") {
-    if (a0 != null && a1 != null && a1 < a0) s += Math.log(a0 / a1) * 10;
-    if (idea.front.familyId === src.front.familyId) s += 8;
-    if (goal === "more-speed") {
-      s += (speedFamilyRank(idea.front) - speedFamilyRank(src.front)) * 5;
-      if (l0 != null && l1 != null) {
-        if (l1 < l0) s += 0.8;
-        if (l1 > l0) s -= 1.5;
-      }
-    }
-  } else if (goal === "more-lift") {
-    if (a0 != null && a1 != null && a1 > a0) s += Math.log(a1 / a0) * 10;
-    if (idea.front.familyId === src.front.familyId) s += 8;
-  } else if (goal === "tighter-turns") {
-    if (l0 != null && l1 != null && l1 < l0) s += ((l0 - l1) / 50) * 4;
-    if (ar0 != null && ar1 != null && ar1 < ar0) s += (ar0 - ar1) * 1.2;
-    s += (carveFamilyRank(idea.front) - carveFamilyRank(src.front)) * 4;
-    if (idea.front.id === src.front.id && l0 != null && l1 != null && l1 < l0) s += 6;
-  } else if (goal === "more-glide") {
-    if (ar0 != null && ar1 != null && ar1 > ar0) s += (ar1 - ar0) * 2.2;
-    s += (glideFamilyRank(idea.front) - glideFamilyRank(src.front)) * 5;
-    if (a0 != null && a1 != null) s -= Math.abs(Math.log(a1 / a0)) * 3;
+function consider(src: Pieces, pieces: Pieces, goal: Goal): Idea | null {
+  if (!isStrictForward(src, pieces, goal)) return null;
+  if (familyRetreats(src.front, pieces.front, goal)) return null;
+  const { jump, stepLabel, tier } = classify(src, pieces);
+  const extra: string[] = [];
+  if (jump === "big") {
+    extra.push("Honest: this is a bigger jump. Try it in power, not on a survival day.");
   }
-  return s;
+  return {
+    ...pieces,
+    headline: autoHeadline(src, pieces),
+    why: [stepLead(src, pieces, jump, stepLabel), ...autoWhy(src, pieces), ...extra],
+    jump,
+    stepLabel,
+    tier,
+  };
 }
 
-function scanForward(src: Pieces, goal: Goal, discipline: Discipline): Idea[] {
-  const fronts = catalog.fronts.filter((f) => f.brand === src.front.brand);
-  const fuses = new Map<string, Fuselage>();
-  fuses.set(src.fuse.id, src.fuse);
-  const shorter = shorterFuse(src.fuse);
-  const longer = longerFuse(src.fuse);
-  if (shorter) fuses.set(shorter.id, shorter);
-  if (longer) fuses.set(longer.id, longer);
-  const tails = new Map<string, TailWing>();
-  tails.set(src.tail.id, src.tail);
-  const hinted = disciplineTailHint(src.tail.brand, discipline);
-  if (hinted) {
-    const t = pickTail(src.tail, hinted, "same");
-    tails.set(t.id, t);
+function frontSizeDir(goal: Goal): "down" | "up" | null {
+  if (goal === "more-lift") return "up";
+  if (goal === "more-speed" || goal === "smaller-size" || goal === "tighter-turns") return "down";
+  return null;
+}
+
+function generateIdeas(src: Pieces, goal: Goal): Idea[] {
+  const out: Idea[] = [];
+  const add = (front: FrontWing, fuse: Fuselage, tail: TailWing) => {
+    const idea = consider(src, { front, fuse, tail }, goal);
+    if (idea) out.push(idea);
+  };
+
+  if (goal === "tighter-turns") {
+    const fuse = shorterFuse(src.fuse);
+    if (fuse) add(src.front, fuse, src.tail);
   }
-  const sm = smallerTail(src.tail);
-  const lg = largerTail(src.tail);
-  if (sm) tails.set(sm.id, sm);
-  if (lg) tails.set(lg.id, lg);
+  if (goal === "more-glide") {
+    const fuse = longerFuse(src.fuse);
+    if (fuse) add(src.front, fuse, src.tail);
+  }
+
+  const tail = goalTail(src.tail, goal);
+  if (tail) add(src.front, src.fuse, tail);
+
+  const dir = frontSizeDir(goal);
+  if (dir) {
+    const one = neighborByArea(src.front, dir);
+    if (one) add(one, src.fuse, src.tail);
+    const skip = skipOne(src.front, dir);
+    if (skip) add(skip, src.fuse, src.tail);
+  }
+  if (goal === "more-glide") {
+    const up = neighborByArea(src.front, "up");
+    const down = neighborByArea(src.front, "down");
+    if (up) add(up, src.fuse, src.tail);
+    if (down) add(down, src.fuse, src.tail);
+    const skipUp = skipOne(src.front, "up");
+    const skipDown = skipOne(src.front, "down");
+    if (skipUp) add(skipUp, src.fuse, src.tail);
+    if (skipDown) add(skipDown, src.fuse, src.tail);
+  }
+
+  const near = familyHopFront(src.front, goal, 1, "near");
+  if (near) add(near, src.fuse, src.tail);
+  const far = familyHopFront(src.front, goal, 1, "far");
+  if (far) add(far, src.fuse, src.tail);
+  const hop2 = familyHopFront(src.front, goal, 2, "near");
+  if (hop2) add(hop2, src.fuse, src.tail);
+  const hop2far = familyHopFront(src.front, goal, 2, "far");
+  if (hop2far) add(hop2far, src.fuse, src.tail);
+
+  const merged = new Map<string, Idea>();
+  for (const idea of out) merged.set(ideaKey(idea), idea);
+  return [...merged.values()];
+}
+
+function changeKind(idea: Idea, src: Pieces): "fuse" | "tail" | "stack" | "front" {
+  if (idea.front.id !== src.front.id) return "front";
+  const fuse = idea.fuse.id !== src.fuse.id;
+  const tail = idea.tail.id !== src.tail.id;
+  if (fuse && tail) return "stack";
+  if (fuse) return "fuse";
+  return "tail";
+}
+
+function tooSimilar(picked: Idea[], idea: Idea, src: Pieces): boolean {
+  if (picked.some((p) => ideaKey(p) === ideaKey(idea))) return true;
+  const kind = changeKind(idea, src);
+  if (kind === "fuse" || kind === "tail" || kind === "stack") {
+    return picked.some((p) => changeKind(p, src) === kind);
+  }
+  return picked.some((p) => p.front.id === idea.front.id);
+}
+
+function skillAllows(level: RiderLevel, idea: Idea, src: Pieces): boolean {
+  const familyChanged = idea.front.familyId !== src.front.familyId;
+  if (level === "learning") {
+    if (familyChanged) return false;
+    if (idea.tier > 1) return false;
+    const dist = sizeDistance(src.front, idea.front);
+    if (dist != null && dist > 1) return false;
+    return true;
+  }
+  if (level === "comfortable" && idea.tier > 2) return false;
+  return true;
+}
+
+function pickLadder(src: Pieces, level: RiderLevel, ideas: Idea[]): Idea[] {
+  const allowed = ideas.filter((i) => skillAllows(level, i, src));
+  const byTier = (a: Idea, b: Idea) =>
+    a.tier - b.tier ||
+    jumpRank(a.jump) - jumpRank(b.jump) ||
+    (a.stepLabel === "fuse" ? 0 : 1) - (b.stepLabel === "fuse" ? 0 : 1);
+
+  const small = allowed.filter((i) => i.tier === 0).sort(byTier);
+  const tiny = allowed.filter((i) => i.tier === 1).sort(byTier);
+  const mid = allowed.filter((i) => i.tier === 2).sort((a, b) => {
+    const af = a.front.familyId === src.front.familyId ? 0 : 1;
+    const bf = b.front.familyId === src.front.familyId ? 0 : 1;
+    return af - bf || byTier(a, b);
+  });
+  const big = allowed.filter((i) => i.tier === 3).sort(byTier);
+  const midSame = mid.filter((i) => i.front.familyId === src.front.familyId);
+  const midFam = mid.filter((i) => i.front.familyId !== src.front.familyId);
 
   const out: Idea[] = [];
-  for (const front of fronts) {
-    for (const fuse of fuses.values()) {
-      for (const tail of tails.values()) {
-        const pieces = { front, fuse, tail };
-        if (!isStrictForward(src, pieces, goal)) continue;
-        out.push({
-          ...pieces,
-          headline: autoHeadline(src, pieces),
-          why: autoWhy(src, pieces),
-        });
-      }
+  const takeFrom = (pool: Idea[]) => {
+    if (out.length >= 3) return;
+    for (const idea of pool) {
+      if (tooSimilar(out, idea, src)) continue;
+      out.push(idea);
+      return;
     }
+  };
+
+  takeFrom(small);
+  if (out.length === 0) takeFrom(tiny);
+
+  if (level === "learning") {
+    takeFrom(small);
+    takeFrom(tiny);
+    return out.slice(0, 3);
   }
-  return out;
+
+  takeFrom(tiny);
+  takeFrom(midSame);
+  if (level === "pushing") {
+    takeFrom(big);
+    takeFrom(midFam);
+  } else {
+    takeFrom(midFam);
+  }
+  takeFrom(small);
+  if (out.length === 0) {
+    takeFrom(mid);
+    if (level === "pushing") takeFrom(big);
+  }
+
+  return [...out]
+    .sort((a, b) => a.tier - b.tier || jumpRank(a.jump) - jumpRank(b.jump))
+    .slice(0, 3);
 }
 
 export function nextSetups(
   current: Setup,
   level: RiderLevel,
-  discipline: Discipline,
+  _discipline: Discipline,
   goal: Goal,
 ): NextSetup[] {
+  void _discipline;
   const src = resolveSetup(current);
   if (!src) return [];
 
-  const sizeDir: "down" | "up" = goal === "more-lift" ? "up" : "down";
-  const step =
-    level === "learning" && goal !== "more-lift"
-      ? neighborByArea(src.front, sizeDir)
-      : level === "pushing" && (goal === "more-speed" || goal === "smaller-size")
-        ? skipOne(src.front, "down")
-        : neighborByArea(src.front, sizeDir);
-
-  const authored: Idea[] = [];
-
-  if (step && (goal === "smaller-size" || goal === "more-speed" || goal === "more-lift")) {
-    const fuse =
-      goal === "more-speed" && level !== "learning"
-        ? (shorterFuse(src.fuse) ?? src.fuse)
-        : goal === "more-lift"
-          ? (longerFuse(src.fuse) ?? src.fuse)
-          : src.fuse;
-    const tail =
-      goal === "more-speed"
-        ? (smallerTail(src.tail) ?? src.tail)
-        : goal === "more-lift"
-          ? (largerTail(src.tail) ?? src.tail)
-          : src.tail;
-    authored.push({
-      front: step,
-      fuse,
-      tail,
-      headline:
-        goal === "more-lift"
-          ? `Stay in ${step.familyOfficial}, go up to ${step.sizeLabel}`
-          : `Stay in ${step.familyOfficial}, drop to ${step.sizeLabel}`,
-      why: [
-        goal === "more-lift"
-          ? "More area → earlier lift and more low-end, less top speed."
-          : "Smaller area → more speed, less lift. Same outline so the feel stays familiar.",
-        fuse.id !== src.fuse.id
-          ? `Fuse ${src.fuse.sizeLabel} → ${fuse.sizeLabel}.`
-          : "Keep the same fuse so the jump is mostly the front wing.",
-        tail.id !== src.tail.id
-          ? `Tail ${src.tail.sizeLabel} → ${tail.sizeLabel}. Smaller tail = looser yaw.`
-          : "Same tail family.",
-        level === "learning"
-          ? "Learning: one size only. Don't skip."
-          : level === "pushing"
-            ? "Pushing: this can feel like a real step — be honest if conditions are soft."
-            : "Comfortable: one clean size change.",
-      ],
-    });
-  }
-
-  if (goal === "more-glide" || goal === "more-speed") {
-    const shift = familyShift(src.front, goal);
-    if (shift) {
-      const next = closestAreaInFamily(
-        shift.brand,
-        shift.familyId,
-        src.front.area_cm2,
-        goal === "more-speed" ? "down" : "same",
-        goal === "more-speed" ? "never-larger" : undefined,
-      );
-      if (next && next.id !== src.front.id) {
-        const fuse = goal === "more-glide" ? (longerFuse(src.fuse) ?? src.fuse) : src.fuse;
-        const tailFam = disciplineTailHint(src.tail.brand, discipline);
-        const tail = pickTail(
-          src.tail,
-          tailFam,
-          goal === "more-speed" ? "smaller" : "same",
-        );
-        authored.push({
-          front: next,
-          fuse,
-          tail,
-          headline: `Move into ${next.familyOfficial} ${next.sizeLabel}`,
-          why: [
-            `Higher-AR family for ${goal === "more-glide" ? "glide" : "speed"}. ${src.front.familyOfficial} (${nAR(src.front)}) → ${next.familyOfficial} (${nAR(next)}).`,
-            areaNote(src.front, next),
-            next.aspect_ratio != null &&
-            src.front.aspect_ratio != null &&
-            next.aspect_ratio - src.front.aspect_ratio > 2
-              ? "That's a real AR jump — less roll, more lock. Don't expect the same snap."
-              : "AR change is usable, not a personality transplant.",
-            discipline === "downwind" || discipline === "race"
-              ? "Downwind/race: this is the intended direction."
-              : discipline === "surf"
-                ? "For surf, a higher-AR wing will draw longer turns. Pair a shorter fuse if you still want pivot."
-                : "Wing: more glide helps through lulls; you give up some roll.",
-          ],
-        });
-      }
-    }
-  }
-
-  if (goal === "tighter-turns") {
-    const fuse = shorterFuse(src.fuse) ?? src.fuse;
-    const tailFam =
-      discipline === "surf" || discipline === "wake"
-        ? disciplineTailHint(src.tail.brand, discipline)
-        : src.tail.familyId;
-    const tail = pickTail(src.tail, tailFam, "smaller");
-    const shift = familyShift(src.front, "tighter-turns");
-    const shifted =
-      shift && closestAreaInFamily(shift.brand, shift.familyId, src.front.area_cm2, "same");
-    const nextFront =
-      shifted && carveFamilyRank(shifted) > carveFamilyRank(src.front) ? shifted : src.front;
-    authored.push({
-      front: nextFront,
-      fuse,
-      tail,
-      headline:
-        nextFront.id === src.front.id
-          ? `Same front, shorter fuse (${fuse.sizeLabel}) and a looser tail`
-          : `Carve lane: ${nextFront.familyOfficial} ${nextFront.sizeLabel} + ${fuse.sizeLabel}`,
-      why: [
-        "Shorter fuse → more maneuverable, less pitch-stable.",
-        "Smaller tail → looser yaw. Don't go tiny if you're still learning gybes.",
-        nextFront.id !== src.front.id
-          ? `Lower/surfier AR family (${nextFront.familyOfficial}) rolls easier than ${src.front.familyOfficial}.`
-          : "Keeping the same front so you feel the fuse/tail change.",
-        level === "learning"
-          ? "Learning: one change at a time is kinder. This stacks fuse + tail — it's a medium jump even if the front stays."
-          : "This is the surf/wake direction.",
-      ],
-    });
-  }
-
-  if (goal === "more-glide" && lane(src.front) === "glide") {
-    const up = neighborByArea(src.front, "up");
-    if (up) {
-      authored.push({
-        front: up,
-        fuse: longerFuse(src.fuse) ?? src.fuse,
-        tail: src.tail,
-        headline: `Stay high-AR, add area (${up.sizeLabel})`,
-        why: [
-          "You're already in the glide family. More area at similar AR is the honest next step for light days — not a smaller, even skinnier wing.",
-          "A longer fuse helps pumping and tracking.",
-        ],
-      });
-    }
-  }
-
-  if ((discipline === "downwind" || discipline === "race") && goal !== "tighter-turns") {
-    const hinted = disciplineTailHint(src.tail.brand, discipline);
-    if (hinted && src.tail.familyId !== hinted && authored[0]) {
-      const t = pickTail(src.tail, hinted, "same");
-      authored[0] = {
-        ...authored[0],
-        tail: t,
-        why: [
-          ...authored[0].why,
-          `${discipline}: swap toward ${t.familyOfficial} ${t.sizeLabel} for less tail drag.`,
-        ],
-      };
-    }
-  }
-
-  const merged = new Map<string, Idea>();
-  for (const idea of [...authored, ...scanForward(src, goal, discipline)]) {
-    if (!isStrictForward(src, idea, goal)) continue;
-    const key = ideaKey(idea);
-    if (!merged.has(key)) merged.set(key, idea);
-  }
-
-  const ranked = [...merged.values()].sort(
-    (a, b) => rankScore(src, b, goal, level) - rankScore(src, a, goal, level),
-  );
-
-  const picked: Idea[] = [];
-  const usedFronts = new Set<string>();
-  for (const idea of ranked) {
-    if (usedFronts.has(idea.front.id)) continue;
-    picked.push(idea);
-    usedFronts.add(idea.front.id);
-    if (picked.length >= 3) break;
-  }
-  if (picked.length < 3) {
-    for (const idea of ranked) {
-      if (picked.includes(idea)) continue;
-      picked.push(idea);
-      if (picked.length >= 3) break;
-    }
-  }
+  const picked = pickLadder(src, level, generateIdeas(src, goal));
 
   return picked.map((idea) => {
     const setup: Setup = {
@@ -604,20 +717,16 @@ export function nextSetups(
       fuseId: idea.fuse.id,
       tailId: idea.tail.id,
     };
-    const jump = jumpFromArea(areaOf(src.front.id), areaOf(idea.front.id));
     const twin = rankTwins(setup, 1)[0] ?? null;
-    const extra =
-      jump === "big"
-        ? ["Honest: this is a big jump. Try it in power, not on a survival day."]
-        : [];
     return {
       setup,
       front: idea.front,
       fuse: idea.fuse,
       tail: idea.tail,
       headline: idea.headline,
-      why: [...idea.why, ...extra],
-      jump,
+      why: idea.why,
+      jump: idea.jump,
+      stepLabel: idea.stepLabel,
       otherBrandTwin: twin,
     };
   });
@@ -635,3 +744,4 @@ function areaNote(from: FrontWing, to: FrontWing): string {
   if (Math.abs(pct) < 6) return "Area stays in the same band.";
   return pct > 0 ? `About ${pct}% more area.` : `About ${Math.abs(pct)}% less area.`;
 }
+

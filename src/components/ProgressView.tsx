@@ -106,8 +106,12 @@ export function ProgressView({
               Recommendations stay on {brandName(setup.brand)} and only move
               forward on the chosen goal — never a larger wing for speed or
               smaller size, never a smaller wing for lift, never a longer fuse
-              for tighter turns, never a lower AR for glide. Up to 3, best
-              first. The active pick also gets the closest{" "}
+              for tighter turns, never a lower AR for glide. Up to 3, ordered
+              small → bigger (fuse/tail first, then a one-size front, then a
+              larger or family step if your skill allows). Learning stays on
+              fuse, tail, or a tiny same-family size — no family leaps. If
+              fewer strict-forward options exist, the carousel is shorter. The
+              active pick also gets the closest{" "}
               {brandName(otherBrand(setup.brand))} twin.
             </p>
           )}
@@ -160,7 +164,9 @@ export function ProgressView({
               <h3>
                 {slide + 1} of {recs.length}. {active.headline}
               </h3>
-              <span className={`jump ${active.jump}`}>{active.jump} jump</span>
+              <span className={`jump ${active.jump}`}>
+                {active.jump === "big" ? "bigger" : active.jump} step · {active.stepLabel}
+              </span>
             </div>
             <div className="pills">
               <span className="pill">

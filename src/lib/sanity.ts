@@ -12,7 +12,8 @@ import {
   resolveSetup,
   sameArClass,
 } from "./match";
-import { isStrictForward, nextSetups } from "./progression";
+import { isStrictForward, nextSetups, type NextSetup } from "./progression";
+import type { RiderLevel } from "../data/types";
 import { FRONT_OVERLAP_MIN, brandConvert } from "./quiver";
 
 function setup(frontId: string, fuseId: string, tailId: string): Setup {
@@ -106,16 +107,30 @@ function short(f: { familyOfficial: string; sizeLabel: string }) {
   return `${f.familyOfficial} ${f.sizeLabel}`;
 }
 
+const art879 = setup("axis-artv2-879", "axis-advplus-ultrashort", "axis-skinny-360-45");
+
+section("Progression ladder (ART v2 879, wing, more speed)");
+const levels: RiderLevel[] = ["learning", "comfortable", "pushing"];
+const ladderByLevel: Record<RiderLevel, NextSetup[]> = {
+  learning: [],
+  comfortable: [],
+  pushing: [],
+};
+for (const level of levels) {
+  const recs = nextSetups(art879, level, "wing", "more-speed");
+  ladderByLevel[level] = recs;
+  console.log(`${level} count=${recs.length} (up to 3, small → bigger, strict-forward)`);
+  for (const r of recs) {
+    console.log(`- ${r.headline} [${r.jump} · ${r.stepLabel}] ${r.front.familyOfficial} ${r.front.sizeLabel}`);
+    if (r.otherBrandTwin) console.log(`  twin: ${describeTwin(r.otherBrandTwin)}`);
+  }
+}
+
 section("Progression sample (ART v2 879, comfortable, wing, more speed)");
-const recs = nextSetups(
-  setup("axis-artv2-879", "axis-advplus-ultrashort", "axis-skinny-360-45"),
-  "comfortable",
-  "wing",
-  "more-speed",
-);
-console.log(`count=${recs.length} (up to 3, strict-forward only)`);
+const recs = ladderByLevel.comfortable;
+console.log(`count=${recs.length} (up to 3, small → bigger, strict-forward only)`);
 for (const r of recs) {
-  console.log(`- ${r.headline} [${r.jump}]`);
+  console.log(`- ${r.headline} [${r.jump} · ${r.stepLabel}]`);
   if (r.otherBrandTwin) console.log(`  twin: ${describeTwin(r.otherBrandTwin)}`);
 }
 
@@ -189,6 +204,90 @@ for (const front of catalog.fronts) {
 console.log(`checked ${strictCases} setup×goal cases, fails=${strictFail}`);
 if (strictFail) {
   throw new Error(`Progression strict-forward failed ${strictFail} check(s)`);
+}
+
+section("Progression skill ladder (no oversized first slides)");
+let ladderFail = 0;
+function jumpOrder(j: NextSetup["jump"]): number {
+  return j === "small" ? 0 : j === "medium" ? 1 : 2;
+}
+const learning879 = ladderByLevel.learning;
+if (learning879.some((r) => r.front.familyId === "fireball")) {
+  console.log("FAIL learning ART 879 more-speed includes a Fireball family jump");
+  ladderFail += 1;
+}
+if (learning879[0]?.front.familyId === "fireball") {
+  console.log("FAIL learning ART 879 more-speed slide 1 is Fireball");
+  ladderFail += 1;
+}
+if (learning879[0] && learning879[0].front.id !== "axis-artv2-879" && learning879[0].stepLabel.startsWith("front")) {
+  console.log(
+    `FAIL learning ART 879 more-speed slide 1 should be fuse/tail, got ${learning879[0].headline}`,
+  );
+  ladderFail += 1;
+}
+if (ladderByLevel.comfortable[0]?.front.familyId === "fireball") {
+  console.log("FAIL comfortable ART 879 more-speed slide 1 is Fireball");
+  ladderFail += 1;
+}
+if (ladderByLevel.pushing[0]?.front.familyId === "fireball") {
+  console.log("FAIL pushing ART 879 more-speed slide 1 is Fireball");
+  ladderFail += 1;
+}
+for (const level of levels) {
+  const list = nextSetups(art879, level, "wing", "more-speed");
+  for (let i = 1; i < list.length; i++) {
+    if (jumpOrder(list[i].jump) < jumpOrder(list[i - 1].jump)) {
+      console.log(`FAIL ${level} ART 879 jumps not small → bigger: ${list.map((r) => r.jump).join(" → ")}`);
+      ladderFail += 1;
+      break;
+    }
+  }
+}
+for (const front of catalog.fronts) {
+  const fuse = fusesByBrand(front.brand)[0];
+  const tail = catalog.tails.find((t) => t.brand === front.brand);
+  if (!fuse || !tail) continue;
+  const s = setup(front.id, fuse.id, tail.id);
+  const src = resolveSetup(s);
+  if (!src) continue;
+  for (const goal of goals) {
+    const learning = nextSetups(s, "learning", "wing", goal);
+    for (const r of learning) {
+      if (r.front.familyId !== src.front.familyId) {
+        console.log(`FAIL learning family jump ${front.id} ${goal}: ${r.front.id}`);
+        ladderFail += 1;
+      }
+      if (r.jump === "big") {
+        console.log(`FAIL learning big jump ${front.id} ${goal}: ${r.headline}`);
+        ladderFail += 1;
+      }
+    }
+    for (const level of levels) {
+      const list = nextSetups(s, level, "wing", goal);
+      const hasSmall =
+        list.length > 0 &&
+        (list.some((r) => r.front.id === src.front.id) ||
+          list.some((r) => r.front.familyId === src.front.familyId && r.stepLabel.includes("one size")));
+      if (hasSmall && list[0] && list[0].front.familyId !== src.front.familyId) {
+        console.log(`FAIL ${level} ${front.id} ${goal}: family jump as slide 1 (${list[0].headline})`);
+        ladderFail += 1;
+      }
+      for (let i = 1; i < list.length; i++) {
+        if (jumpOrder(list[i].jump) < jumpOrder(list[i - 1].jump)) {
+          console.log(
+            `FAIL ${level} ${front.id} ${goal} order ${list.map((r) => r.jump).join(" → ")}`,
+          );
+          ladderFail += 1;
+          break;
+        }
+      }
+    }
+  }
+}
+console.log(`skill-ladder fails=${ladderFail}`);
+if (ladderFail) {
+  throw new Error(`Progression skill ladder failed ${ladderFail} check(s)`);
 }
 
 section(`Twin page floor (front ≥ ${MIN_FRONT_TWIN}%)`);
