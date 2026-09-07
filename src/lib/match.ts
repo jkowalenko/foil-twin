@@ -24,6 +24,7 @@ import {
   spanDeltaWords,
   tailTitle,
 } from "./format";
+import { twinMastFamily } from "./mastFamilies";
 
 export type DimScore = {
   key: string;
@@ -463,6 +464,9 @@ function whyMast(a: Mast, b: Mast): string[] {
   const bits: string[] = [];
   const len = mastDeltaWords(a.length_mm, b.length_mm);
   if (len) bits.push(len);
+  if (twinMastFamily(a.familyId) === b.familyId) {
+    bits.push("same mast class (family twin)");
+  }
   const ba = mastMaterialBucket(a);
   const bb = mastMaterialBucket(b);
   if (ba === "motor" || bb === "motor") {
@@ -486,11 +490,18 @@ function whyMast(a: Mast, b: Mast): string[] {
 }
 
 export function rankMastTwins(from: Mast, limit = 4): PartTwin<Mast>[] {
+  const twinFamily = twinMastFamily(from.familyId);
   const others = catalog.masts.filter((m) => m.brand !== from.brand);
+  const inFamily = others.filter((m) => m.familyId === twinFamily);
+  const pool =
+    inFamily.length > 0
+      ? inFamily
+      : others.filter((m) => mastMaterialBucket(m) === mastMaterialBucket(from));
   const ranked: PartTwin<Mast>[] = [];
-  for (const m of others) {
+  for (const m of pool) {
     const s = scoreMastPair(from, m);
     if (s.score == null) continue;
+    // Prefer length within the mapped family; family match is already enforced by pool.
     ranked.push({
       part: m,
       score: s.score * 100,

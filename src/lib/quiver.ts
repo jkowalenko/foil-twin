@@ -30,6 +30,7 @@ import {
   type TwinMatch,
 } from "./match";
 import { longerFuse, nextSetups, shorterFuse, type NextSetup } from "./progression";
+import { twinMastFamily } from "./mastFamilies";
 
 export const EMPTY_QUIVER: QuiverDoc = {
   version: 1,
@@ -833,6 +834,21 @@ function buyFromId(
   };
 }
 
+
+/** Build a kit row for a target-brand catalog part (UI add-to-kit). */
+export function makeConvertBuyItem(
+  kind: ConvertRow["kind"],
+  id: string,
+  buyList: ConvertBuyItem[] = [],
+): ConvertBuyItem | null {
+  return buyFromId(kind, id, buyList, true);
+}
+
+/** Rider-facing incomplete-kit note when a kind is missing after edits. */
+export function kitMissingKinds(items: ConvertBuyItem[]): ConvertRow["kind"][] {
+  const have = new Set(items.map((i) => i.kind));
+  return (["front", "tail", "fuse", "mast"] as const).filter((k) => !have.has(k));
+}
 function midAreaOf(fronts: FrontWing[]): number | null {
   const areas = fronts
     .map((f) => f.area_cm2)
@@ -1081,8 +1097,13 @@ function pickCompleteKit(args: {
     const mt = nearestMast(srcMast.id);
     if (mt && !mt.motorIntegrated) mastCands.push({ id: mt.id, source: "twin" });
     if (srcMast.length_mm != null) {
+      const twinFam = twinMastFamily(srcMast.familyId);
       const pool = catalog.masts.filter(
-        (m) => m.brand === to && !m.motorIntegrated && (m.length_mm ?? 0) >= band.min,
+        (m) =>
+          m.brand === to &&
+          !m.motorIntegrated &&
+          m.familyId === twinFam &&
+          (m.length_mm ?? 0) >= band.min,
       );
       const near = [...pool].sort(
         (a, b) =>

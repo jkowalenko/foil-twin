@@ -7,13 +7,23 @@ export type QuiverUiPrefs = {
     gaps: boolean;
     nextToBuy: boolean;
     brandConvert: boolean;
+    /** Simplified kit (80%) panel open */
+    kit80: boolean;
+    /** Fuller kit (90%) panel open */
+    kit90: boolean;
   };
   currency: CurrencyCode;
 };
 
 export const DEFAULT_QUIVER_UI: QuiverUiPrefs = {
   version: 1,
-  sections: { gaps: true, nextToBuy: true, brandConvert: false },
+  sections: {
+    gaps: true,
+    nextToBuy: true,
+    brandConvert: false,
+    kit80: true,
+    kit90: true,
+  },
   currency: "USD",
 };
 
@@ -29,6 +39,10 @@ function parseCurrency(raw: unknown): CurrencyCode {
   return raw === "CAD" ? "CAD" : "USD";
 }
 
+function parseBool(raw: unknown, fallback: boolean): boolean {
+  return typeof raw === "boolean" ? raw : fallback;
+}
+
 /** Parse a stored prefs blob. Unknown / wrong version → defaults. */
 export function parseQuiverUi(raw: unknown): QuiverUiPrefs {
   if (!raw || typeof raw !== "object") return cloneDefault();
@@ -40,13 +54,11 @@ export function parseQuiverUi(raw: unknown): QuiverUiPrefs {
   return {
     version: 1,
     sections: {
-      gaps: typeof s.gaps === "boolean" ? s.gaps : DEFAULT_QUIVER_UI.sections.gaps,
-      nextToBuy:
-        typeof s.nextToBuy === "boolean" ? s.nextToBuy : DEFAULT_QUIVER_UI.sections.nextToBuy,
-      brandConvert:
-        typeof s.brandConvert === "boolean"
-          ? s.brandConvert
-          : DEFAULT_QUIVER_UI.sections.brandConvert,
+      gaps: parseBool(s.gaps, DEFAULT_QUIVER_UI.sections.gaps),
+      nextToBuy: parseBool(s.nextToBuy, DEFAULT_QUIVER_UI.sections.nextToBuy),
+      brandConvert: parseBool(s.brandConvert, DEFAULT_QUIVER_UI.sections.brandConvert),
+      kit80: parseBool(s.kit80, DEFAULT_QUIVER_UI.sections.kit80),
+      kit90: parseBool(s.kit90, DEFAULT_QUIVER_UI.sections.kit90),
     },
     currency: parseCurrency(v.currency),
   };
@@ -69,6 +81,8 @@ export function saveQuiverUi(prefs: QuiverUiPrefs) {
       gaps: !!prefs.sections.gaps,
       nextToBuy: !!prefs.sections.nextToBuy,
       brandConvert: !!prefs.sections.brandConvert,
+      kit80: !!prefs.sections.kit80,
+      kit90: !!prefs.sections.kit90,
     },
     currency: parseCurrency(prefs.currency),
   };

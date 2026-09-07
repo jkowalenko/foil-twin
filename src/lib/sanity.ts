@@ -8,6 +8,7 @@ import {
   arClass,
   describeTwin,
   rankFrontTwins,
+  nearestMast,
   rankMastTwins,
   rankTwins,
   resolveSetup,
@@ -24,6 +25,7 @@ import {
   upsertNamedSetup,
 } from "./quiver";
 import { DEFAULT_QUIVER_UI, parseQuiverUi } from "./quiverUi";
+import { MAST_FAMILY_TWIN, twinMastFamily } from "./mastFamilies";
 import {
   FX_USD_TO_CAD,
   PART_PRICES_USD,
@@ -755,6 +757,8 @@ if (
   uiDefault.sections.gaps !== true ||
   uiDefault.sections.nextToBuy !== true ||
   uiDefault.sections.brandConvert !== false ||
+  uiDefault.sections.kit80 !== true ||
+  uiDefault.sections.kit90 !== true ||
   uiDefault.currency !== "USD"
 ) {
   throw new Error(`UI prefs defaults wrong: ${JSON.stringify(uiDefault)}`);
@@ -763,16 +767,24 @@ if (
   DEFAULT_QUIVER_UI.sections.gaps !== true ||
   DEFAULT_QUIVER_UI.sections.nextToBuy !== true ||
   DEFAULT_QUIVER_UI.sections.brandConvert !== false ||
+  DEFAULT_QUIVER_UI.sections.kit80 !== true ||
+  DEFAULT_QUIVER_UI.sections.kit90 !== true ||
   DEFAULT_QUIVER_UI.currency !== "USD"
 ) {
-  throw new Error("DEFAULT_QUIVER_UI sections must be gaps/nextToBuy open, brandConvert closed; currency USD");
+  throw new Error("DEFAULT_QUIVER_UI: gaps/nextToBuy/kit80/kit90 open, brandConvert closed; currency USD");
 }
 const uiOn = parseQuiverUi({
   version: 1,
-  sections: { gaps: false, nextToBuy: true, brandConvert: true },
+  sections: { gaps: false, nextToBuy: true, brandConvert: true, kit80: false, kit90: true },
   currency: "CAD",
 });
-if (uiOn.sections.gaps !== false || uiOn.sections.brandConvert !== true || uiOn.currency !== "CAD") {
+if (
+  uiOn.sections.gaps !== false ||
+  uiOn.sections.brandConvert !== true ||
+  uiOn.sections.kit80 !== false ||
+  uiOn.sections.kit90 !== true ||
+  uiOn.currency !== "CAD"
+) {
   throw new Error("parseQuiverUi should honor boolean section flags and currency");
 }
 const uiLegacy = parseQuiverUi({
@@ -782,17 +794,22 @@ const uiLegacy = parseQuiverUi({
 if (uiLegacy.currency !== "USD") {
   throw new Error("prefs without currency must default to USD");
 }
+if (uiLegacy.sections.kit80 !== true || uiLegacy.sections.kit90 !== true) {
+  throw new Error("legacy prefs without kit80/kit90 must default both kits open");
+}
 const uiJunk = parseQuiverUi({ version: 1, owner: null, parts: { frontIds: [] } });
 if (
   uiJunk.sections.gaps !== true ||
   uiJunk.sections.nextToBuy !== true ||
   uiJunk.sections.brandConvert !== false ||
+  uiJunk.sections.kit80 !== true ||
+  uiJunk.sections.kit90 !== true ||
   uiJunk.currency !== "USD"
 ) {
   throw new Error("inventory-shaped blobs must not parse as UI prefs");
 }
 console.log(
-  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed currency=${uiDefault.currency}`,
+  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed kits open currency=${uiDefault.currency}`,
 );
 
 section("Manufacturer prices");
@@ -865,10 +882,57 @@ if (race.missing.some((m) => /You own /.test(m))) {
 }
 console.log(`race gaps (${race.missing.length}): ${race.missing.join(" | ")}`);
 
-section("Mast twins (length)");
+section("Mast family twin map");
+const expectPairs: [string, string][] = [
+  ["axis-pc-hm", "arm-perf-mk2"],
+  ["arm-perf-mk2", "axis-pc-hm"],
+  ["axis-pro-uhm", "arm-perf-x"],
+  ["axis-kaiwi", "arm-perf-x"],
+  ["arm-perf-x", "axis-pro-uhm"],
+  ["axis-al-19", "arm-alloy"],
+  ["axis-pc", "arm-carbon-mk2"],
+  ["axis-fatty", "arm-carbon-mk2"],
+  ["axis-fd-hm", "arm-fd-assist"],
+  ["axis-fd-uhm", "arm-fd-assist"],
+];
+for (const [from, to] of expectPairs) {
+  const got = twinMastFamily(from as keyof typeof MAST_FAMILY_TWIN);
+  if (got !== to) throw new Error(`mast family map ${from} → ${got}, expected ${to}`);
+}
+console.log(`mast family map entries=${Object.keys(MAST_FAMILY_TWIN).length}`);
+
+section("Mast twins (family + length)");
+function assertMastFamily(fromId: string, expectFamily: string) {
+  const m = catalog.masts.find((x) => x.id === fromId);
+  if (!m) throw new Error(`missing mast ${fromId}`);
+  const twin = nearestMast(fromId);
+  if (!twin) throw new Error(`no twin for ${fromId}`);
+  if (twin.familyId !== expectFamily) {
+    throw new Error(
+      `${fromId} twined to ${twin.id} (${twin.familyId}), expected family ${expectFamily}`,
+    );
+  }
+  console.log(
+    `${m.familyOfficial} ${m.sizeLabel} → ${twin.familyOfficial} ${twin.sizeLabel} [${twin.familyId}]`,
+  );
+}
+assertMastFamily("axis-pchm-900", "arm-perf-mk2");
+assertMastFamily("axis-pchm-750", "arm-perf-mk2");
+assertMastFamily("axis-pro-800", "arm-perf-x");
+assertMastFamily("axis-kaiwi-780", "arm-perf-x");
+assertMastFamily("arm-pmk2-795", "axis-pc-hm");
+assertMastFamily("arm-px-795", "axis-pro-uhm");
+assertMastFamily("axis-al19-750", "arm-alloy");
+assertMastFamily("axis-pc-900", "arm-carbon-mk2");
+
 for (const id of ["axis-al19-750", "axis-pro-800", "arm-pmk2-795", "arm-alloy-72"]) {
   const m = catalog.masts.find((x) => x.id === id)!;
   const twins = rankMastTwins(m, 2);
+  if (!twins.length) throw new Error(`rankMastTwins empty for ${id}`);
+  const twinFam = twinMastFamily(m.familyId);
+  if (twins[0].part.familyId !== twinFam) {
+    throw new Error(`top twin for ${id} not in family ${twinFam}`);
+  }
   console.log(
     `${m.familyOfficial} ${m.sizeLabel} → ${twins.map((t) => `${t.part.familyOfficial} ${t.part.sizeLabel} ${Math.round(t.score)}%`).join(" · ")}`,
   );

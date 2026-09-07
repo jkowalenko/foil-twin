@@ -31,6 +31,8 @@ import {
   toggleId,
   upsertNamedSetup,
   type ConvertBuyItem,
+  makeConvertBuyItem,
+  kitMissingKinds,
 } from "../lib/quiver";
 import {
   loadQuiverUi,
@@ -48,6 +50,11 @@ export function QuiverView({ onAdopt }: Props) {
   const [draft, setDraft] = useState<Omit<NamedSetup, "id">>(() => emptyDraft("axis"));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [convertOff, setConvertOff] = useState<Set<string>>(() => new Set());
+  /** null = use algorithm kit; otherwise session-edited list for that tier */
+  const [kitEdits, setKitEdits] = useState<{ 80: ConvertBuyItem[] | null; 90: ConvertBuyItem[] | null }>({
+    80: null,
+    90: null,
+  });
   const [ui, setUi] = useState<QuiverUiPrefs>(() => loadQuiverUi());
   const draftRef = useRef<HTMLDivElement>(null);
 
@@ -91,7 +98,48 @@ export function QuiverView({ onAdopt }: Props) {
     };
     return brandConvert(doc, include);
   }, [doc, convertOff]);
+
+  const convertBaselineKey = useMemo(() => {
+    if (!convert) return "";
+    return convert.coverageTiers
+      .map((t) => `${t.pct}:${t.items.map((i) => `${i.kind}-${i.twinId}`).join(",")}`)
+      .join("|");
+  }, [convert]);
+
+  useEffect(() => {
+    setKitEdits({ 80: null, 90: null });
+  }, [convertBaselineKey]);
+
   const home = majorityBrand(doc);
+
+  function kitItemsFor(pct: 80 | 90): ConvertBuyItem[] {
+    const edited = kitEdits[pct];
+    if (edited) return edited;
+    return convert?.coverageTiers.find((t) => t.pct === pct)?.items ?? [];
+  }
+
+  function removeKitItem(pct: 80 | 90, twinId: string, kind: ConvertBuyItem["kind"]) {
+    setKitEdits((prev) => {
+      const base = prev[pct] ?? convert?.coverageTiers.find((t) => t.pct === pct)?.items ?? [];
+      return { ...prev, [pct]: base.filter((i) => !(i.twinId === twinId && i.kind === kind)) };
+    });
+  }
+
+  function addKitItem(pct: 80 | 90, kind: ConvertBuyItem["kind"], id: string) {
+    if (!id) return;
+    const item = makeConvertBuyItem(kind, id, convert?.buyList ?? []);
+    if (!item) return;
+    setKitEdits((prev) => {
+      const base = [...(prev[pct] ?? convert?.coverageTiers.find((t) => t.pct === pct)?.items ?? [])];
+      if (base.some((i) => i.kind === kind && i.twinId === id)) return prev;
+      base.push(item);
+      return { ...prev, [pct]: base };
+    });
+  }
+
+  function resetKit(pct: 80 | 90) {
+    setKitEdits((prev) => ({ ...prev, [pct]: null }));
+  }
 
   function toggleConvert(id: string) {
     setConvertOff((prev) => {
@@ -393,6 +441,41 @@ export function QuiverView({ onAdopt }: Props) {
           sub={`Starter and more-complete ${brandName(otherBrand(home))} kits closest to what you ride`}
           open={ui.sections.brandConvert}
           onToggle={() => toggleSection("brandConvert")}
+          headerExtra={
+            <div
+              className="currency-row currency-row-header"
+              role="group"
+              aria-label="Prices currency"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <span className="currency-label">Prices</span>
+              <div className="currency-seg">
+                <button
+                  type="button"
+                  className={ui.currency === "USD" ? "on" : ""}
+                  aria-pressed={ui.currency === "USD"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrency("USD");
+                  }}
+                >
+                  USD
+                </button>
+                <button
+                  type="button"
+                  className={ui.currency === "CAD" ? "on" : ""}
+                  aria-pressed={ui.currency === "CAD"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrency("CAD");
+                  }}
+                >
+                  CAD
+                </button>
+              </div>
+            </div>
+          }
         >
           {!convert && (
             <p className="empty-state">Add a part you own to see the other brand.</p>
@@ -436,27 +519,6 @@ export function QuiverView({ onAdopt }: Props) {
                   })}
                 </div>
               )}
-              <div className="currency-row" role="group" aria-label="Currency">
-                <span className="currency-label">Prices</span>
-                <div className="currency-seg">
-                  <button
-                    type="button"
-                    className={ui.currency === "USD" ? "on" : ""}
-                    aria-pressed={ui.currency === "USD"}
-                    onClick={() => setCurrency("USD")}
-                  >
-                    USD
-                  </button>
-                  <button
-                    type="button"
-                    className={ui.currency === "CAD" ? "on" : ""}
-                    aria-pressed={ui.currency === "CAD"}
-                    onClick={() => setCurrency("CAD")}
-                  >
-                    CAD
-                  </button>
-                </div>
-              </div>
               <p className="convert-headline">{convert.headline}.</p>
               <div className="pills">
                 <span className="pill">
@@ -491,28 +553,52 @@ export function QuiverView({ onAdopt }: Props) {
                 </div>
               )}
               <h3 className="quiver-h">Suggested kits</h3>
-              {convert.coverageTiers.map((tier) => (
-                <div key={tier.pct} className={`convert-tier convert-tier-${tier.pct}`}>
-                  <h3>{tier.pct === 80 ? "Simplified kit" : "Fuller kit"}</h3>
-                  <p className="convert-tier-meta">{tier.note}</p>
-                  {tier.items.length === 0 ? (
-                    <p className="note">No other-brand buys in this kit.</p>
-                  ) : (
-                    <>
+              {([80, 90] as const).map((pct) => {
+                const tier = convert.coverageTiers.find((t) => t.pct === pct);
+                const items = kitItemsFor(pct);
+                const sectionKey = pct === 80 ? "kit80" : "kit90";
+                const open = ui.sections[sectionKey];
+                const missing = kitMissingKinds(items);
+                const dirty = kitEdits[pct] != null;
+                return (
+                  <CollapsiblePanel
+                    key={pct}
+                    id={`kit-${pct}`}
+                    label={pct === 80 ? "Simplified kit" : "Fuller kit"}
+                    title={pct === 80 ? "Simplified kit" : "Fuller kit"}
+                    sub={tier?.note}
+                    open={open}
+                    onToggle={() => toggleSection(sectionKey)}
+                    nested
+                  >
+                    {items.length === 0 ? (
+                      <p className="note">No other-brand buys in this kit.</p>
+                    ) : (
                       <div className="buy-list">
-                        {tier.items.map((item) => (
+                        {items.map((item) => (
                           <ConvertBuyCard
-                            key={`${tier.pct}-${item.kind}-${item.twinId}`}
+                            key={`${pct}-${item.kind}-${item.twinId}`}
                             item={item}
                             currency={ui.currency}
+                            onRemove={() => removeKitItem(pct, item.twinId, item.kind)}
                           />
                         ))}
                       </div>
-                      <KitTotal items={tier.items} currency={ui.currency} />
-                    </>
-                  )}
-                </div>
-              ))}
+                    )}
+                    <KitTotal items={items} currency={ui.currency} />
+                    {missing.length > 0 && (
+                      <p className="note incomplete-kit">Incomplete kit — missing {missing.join(", ")}.</p>
+                    )}
+                    <KitEditor
+                      targetBrand={convert.to}
+                      existing={items}
+                      onAdd={(kind, id) => addKitItem(pct, kind, id)}
+                      onReset={() => resetKit(pct)}
+                      dirty={dirty}
+                    />
+                  </CollapsiblePanel>
+                );
+              })}
               {convert.rangeSummaries.length > 0 && (
                 <div className="convert-ranges">
                   {convert.rangeSummaries.map((r) => (
@@ -601,6 +687,8 @@ function CollapsiblePanel({
   open,
   onToggle,
   children,
+  headerExtra,
+  nested,
 }: {
   id: string;
   label: string;
@@ -609,10 +697,12 @@ function CollapsiblePanel({
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
+  headerExtra?: ReactNode;
+  nested?: boolean;
 }) {
   const bodyId = `quiver-section-${id}`;
   return (
-    <div className={`panel${open ? "" : " collapsed"}`}>
+    <div className={`panel${nested ? " nested-panel" : ""}${open ? "" : " collapsed"}`}>
       <div className="panel-h collapsible-h">
         <button
           type="button"
@@ -626,6 +716,16 @@ function CollapsiblePanel({
             <span className="panel-title">{title}</span>
             {sub ? <span className="sub">{sub}</span> : null}
           </span>
+        </button>
+        {headerExtra ? <div className="panel-h-extra">{headerExtra}</div> : null}
+        <button
+          type="button"
+          className="panel-chevron-btn"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          aria-label={label}
+          onClick={onToggle}
+        >
           <span className={`chevron${open ? " open" : ""}`} aria-hidden="true" />
         </button>
       </div>
@@ -639,9 +739,11 @@ function CollapsiblePanel({
 function ConvertBuyCard({
   item,
   currency,
+  onRemove,
 }: {
   item: ConvertBuyItem;
   currency: CurrencyCode;
+  onRemove?: () => void;
 }) {
   const completeness = Boolean(item.kitOnly) && item.covers.length === 0;
   const noCovers = item.covers.length === 0;
@@ -655,6 +757,11 @@ function ConvertBuyCard({
           <span className="kind-tag">{item.kind}</span> {item.twinTitle}
         </strong>
         <span className="buy-price">{formatMoney(price, currency)}</span>
+        {onRemove ? (
+          <button type="button" className="kit-remove" aria-label="Remove from kit" onClick={onRemove}>
+            Remove
+          </button>
+        ) : null}
       </div>
       <div className="twin-tags">
         {completeness ? (
@@ -677,6 +784,90 @@ function ConvertBuyCard({
           {item.note && <p className="note convert-buy-note">{item.note}</p>}
         </>
       )}
+    </div>
+  );
+}
+
+function KitEditor({
+  targetBrand,
+  existing,
+  onAdd,
+  onReset,
+  dirty,
+}: {
+  targetBrand: Brand;
+  existing: ConvertBuyItem[];
+  onAdd: (kind: ConvertBuyItem["kind"], id: string) => void;
+  onReset: () => void;
+  dirty: boolean;
+}) {
+  const [kind, setKind] = useState<ConvertBuyItem["kind"]>("front");
+  const [partId, setPartId] = useState("");
+  const options = useMemo(() => {
+    const list =
+      kind === "front"
+        ? catalog.fronts.filter((p) => p.brand === targetBrand)
+        : kind === "tail"
+          ? catalog.tails.filter((p) => p.brand === targetBrand)
+          : kind === "fuse"
+            ? catalog.fuselages.filter((p) => p.brand === targetBrand)
+            : catalog.masts.filter((p) => p.brand === targetBrand);
+    return list.map((p) => ({
+      id: p.id,
+      label:
+        kind === "mast"
+          ? `${(p as { familyOfficial: string }).familyOfficial} ${p.sizeLabel}`
+          : kind === "front" || kind === "tail"
+            ? `${(p as { familyOfficial: string }).familyOfficial} ${p.sizeLabel}`
+            : p.sizeLabel,
+    }));
+  }, [kind, targetBrand]);
+
+  useEffect(() => {
+    setPartId("");
+  }, [kind, targetBrand]);
+
+  const taken = new Set(existing.filter((i) => i.kind === kind).map((i) => i.twinId));
+
+  return (
+    <div className="kit-editor">
+      <div className="kit-editor-row">
+        <label className="kit-editor-label">
+          Add
+          <select value={kind} onChange={(e) => setKind(e.target.value as ConvertBuyItem["kind"])}>
+            <option value="front">Front</option>
+            <option value="tail">Tail</option>
+            <option value="fuse">Fuse</option>
+            <option value="mast">Mast</option>
+          </select>
+        </label>
+        <select
+          value={partId}
+          onChange={(e) => setPartId(e.target.value)}
+          aria-label={`Pick ${kind} to add`}
+        >
+          <option value="">Pick a part…</option>
+          {options.map((o) => (
+            <option key={o.id} value={o.id} disabled={taken.has(o.id)}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="kit-add"
+          disabled={!partId}
+          onClick={() => {
+            onAdd(kind, partId);
+            setPartId("");
+          }}
+        >
+          Add
+        </button>
+        <button type="button" className="kit-reset" disabled={!dirty} onClick={onReset}>
+          Reset kit
+        </button>
+      </div>
     </div>
   );
 }
