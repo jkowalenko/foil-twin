@@ -210,7 +210,7 @@ export function analyzeGaps(doc: QuiverDoc): QuiverGap[] {
     }
 
     if (!fuses.length) {
-      missing.push("No fuselage. Twin matching still needs a fuse even if mast length is the bigger feel change.");
+      missing.push("No fuselage yet — a complete setup needs one.");
     }
 
     const role = WANT_TAIL[discipline];
@@ -359,7 +359,7 @@ export function recommendBuys(doc: QuiverDoc): BuyRec[] {
           kind: "front",
           partId: f.id,
           title: `${f.familyOfficial} ${f.sizeLabel}`,
-          why: `${d} wants a ${lanes.join("/")} outline. ${f.familyOfficial} ${f.sizeLabel} is the closest ${brandName(brand)} published size to what you already ride.`,
+          why: `${d}: ${f.familyOfficial} ${f.sizeLabel} is the closest ${brandName(brand)} size in a matching shape.`,
           brand,
         });
       }
@@ -372,7 +372,7 @@ export function recommendBuys(doc: QuiverDoc): BuyRec[] {
           kind: "tail",
           partId: t.id,
           title: `${t.familyOfficial} ${t.sizeLabel}`,
-          why: `${d}: add a ${role === "speed" ? "Skinny / Speed" : "Surf"} tail so yaw matches the job.`,
+          why: `${d}: add a ${role === "speed" ? "Skinny / Speed" : "Surf"} tail for that ride.`,
           brand,
         });
       }
@@ -661,13 +661,15 @@ function convertBuyNote(item: ConvertBuyItem, doc: QuiverDoc): string | undefine
   if (item.kind === "front") {
     const twin = frontById(item.twinId);
     if (twin && doc.disciplines.length && !frontFitsDisciplines(twin, doc.disciplines)) {
-      bits.push("outline sits outside ticked disciplines' usual lanes");
+      bits.push("Shape sits a bit outside the disciplines you ticked");
     }
     if (goal && twin) {
       for (const c of item.covers) {
         const owned = frontById(c.ownedId);
         if (owned && frontGoalRetreats(owned, twin, goal)) {
-          bits.push(`covers ${c.ownedTitle}; not a ${goal} forward step`);
+          bits.push(
+            `Closest match for ${c.ownedTitle}, not a step toward ${goal.replace(/-/g, " ")}`,
+          );
           break;
         }
       }
@@ -679,11 +681,11 @@ function convertBuyNote(item: ConvertBuyItem, doc: QuiverDoc): string | undefine
       const owned = fuseById(c.ownedId);
       if (!owned || !twin || owned.fuse_length_mm == null || twin.fuse_length_mm == null) continue;
       if (goal === "tighter-turns" && twin.fuse_length_mm > owned.fuse_length_mm) {
-        bits.push("longer than the owned fuse — covers length, not a tighter-turns step");
+        bits.push("Longer than yours — matches length, not a tighter-turn step");
         break;
       }
       if (goal === "more-glide" && twin.fuse_length_mm < owned.fuse_length_mm) {
-        bits.push("shorter than the owned fuse — covers length, not a more-glide step");
+        bits.push("Shorter than yours — matches length, not a more-glide step");
         break;
       }
     }
@@ -730,7 +732,7 @@ function cloneBuy(item: ConvertBuyItem): ConvertBuyItem {
 }
 
 function isKitNote(note?: string): boolean {
-  return !!note && /^Kit /.test(note);
+  return !!note && /complete setup/i.test(note);
 }
 
 function upsertBuy(list: ConvertBuyItem[], item: ConvertBuyItem) {
@@ -806,9 +808,9 @@ function kitOnlyNote(kind: ConvertRow["kind"], checked: boolean): string {
   const noun =
     kind === "front" ? "front" : kind === "tail" ? "tail" : kind === "fuse" ? "fuse" : "mast";
   if (!checked) {
-    return `Kit ${noun} — recommended for complete setup (no owned ${noun} checked)`;
+    return `Included for a complete setup (no owned ${noun} ticked)`;
   }
-  return `Kit ${noun} — recommended for complete setup`;
+  return `Included for a complete setup`;
 }
 
 function buyFromId(
@@ -1118,10 +1120,10 @@ function ensureKitKinds(
 }
 
 function riderContext(doc: QuiverDoc): string {
-  const discs = (doc.disciplines.length ? doc.disciplines : ["wing"]).join("/");
+  const discs = (doc.disciplines.length ? doc.disciplines : ["wing"]).join(", ");
   const level = doc.level ?? "comfortable";
-  const goal = doc.goal ?? "more-speed";
-  return `${discs}, ${level}, ${goal}`;
+  const goal = (doc.goal ?? "more-speed").replace(/-/g, " ");
+  return `${discs} · ${level} · ${goal}`;
 }
 
 function snapshotCoverageTier(
@@ -1199,7 +1201,7 @@ function buildCoverageTiers(args: {
       if (!item) continue;
       if (item.kitOnly || item.covers.length === 0) {
         item.kitOnly = false;
-        item.note = `Further progression (${doc.goal ?? "goal"}): ${r.headline}`;
+        item.note = `Next step (${(doc.goal ?? "goal").replace(/-/g, " ")}): ${r.headline}`;
       }
       upsertBuy(items90, item);
       extra += 1;
@@ -1208,28 +1210,12 @@ function buildCoverageTiers(args: {
   }
   ensureKitKinds(items90, kit);
 
-  const covered80 = coveredOwnedIds(items80, ownedIds).size;
-  const covered90 = coveredOwnedIds(items90, ownedIds).size;
   const total = ownedIds.length;
-  const kitBit = "Complete rideable kit (front, tail, fuse, mast).";
-  let note80: string;
-  if (!total) {
-    note80 = `${kitBit} Simplified progression kit for ${ctx} — no checked parts to cover.`;
-  } else {
-    const actual = Math.round((covered80 / total) * 100);
-    note80 = `${kitBit} Simplified progression kit for ${ctx}: ${items80.length} unique ${toName} buy${
-      items80.length === 1 ? "" : "s"
-    } covering ${covered80}/${total} checked parts (${actual}%). Prefers fewer overlapping sizes; min–max pair when a family would pad.`;
-  }
-  let note90: string;
-  if (!total) {
-    note90 = `${kitBit} Fuller coverage / further progression for ${ctx} — extends the simplified kit.`;
-  } else {
-    const actual = Math.round((covered90 / total) * 100);
-    note90 = `${kitBit} Fuller coverage / further progression for ${ctx}: ${items90.length} unique ${toName} buy${
-      items90.length === 1 ? "" : "s"
-    } covering ${covered90}/${total} checked parts (${actual}%), plus remaining outliers and extra goal steps.`;
-  }
+  const kitBit = `Front, tail, fuselage, and mast — a rideable ${toName} kit.`;
+  const note80 = `${kitBit} Compact starter kit for ${ctx}.`;
+  const note90 = !total
+    ? `${kitBit} Fuller kit for ${ctx} — same starter pieces, plus extra sizes.`
+    : `${kitBit} Fuller kit for ${ctx} — the starter kit plus extra sizes for more of what you ride.`;
 
   return [
     snapshotCoverageTier(items80, ownedIds, 80, note80),
@@ -1267,9 +1253,9 @@ function buildRangeSummaries(
       );
     const optionalLabel = (item: ConvertBuyItem, optional: (80 | 90)[]): string | null => {
       const size = twinSizeLabel(item);
-      if (optional.includes(80) && optional.includes(90)) return `${size} optional`;
-      if (optional.includes(80)) return `${size} optional for 80%`;
-      if (optional.includes(90)) return `${size} optional for 90%`;
+      if (optional.includes(80) && optional.includes(90)) return `${size} optional extra`;
+      if (optional.includes(80)) return `${size} skip on the simplified kit`;
+      if (optional.includes(90)) return `${size} skip on the fuller kit`;
       return null;
     };
     const mids: ConvertRangeMid[] = sorted.slice(1, -1).map((m) => ({
@@ -1298,7 +1284,7 @@ function buildRangeSummaries(
       maxId: max.twinId,
       maxTitle: max.twinTitle,
       mids,
-      note: `${fam} ${twinSizeLabel(min)}–${twinSizeLabel(max)} progressive pair${bits.length ? ` · ${bits.join("; ")}` : ""}`,
+      note: `${fam} ${twinSizeLabel(min)}–${twinSizeLabel(max)} range${bits.length ? ` · ${bits.join("; ")}` : ""}`,
     });
   }
   return out;
@@ -1346,7 +1332,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
       twinId: nearest?.front.id ?? null,
       twinTitle: nearest ? `${nearest.front.familyOfficial} ${nearest.front.sizeLabel}` : null,
       score: nearest?.score ?? null,
-      why: nearest?.why[0] ?? "No published-spec twin.",
+      why: nearest?.why[0] ?? "No published match.",
     });
   }
   for (const id of tailIds) {
@@ -1361,8 +1347,8 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
       twinTitle: t ? `${t.familyOfficial} ${t.sizeLabel}` : null,
       score: null,
       why: t
-        ? `Same-ish tail job (${p.role} lane) on ${brandName(to)}.`
-        : "No tail twin.",
+        ? `Same kind of tail job on ${brandName(to)}.`
+        : "No tail match.",
     });
   }
   for (const id of fuseIds) {
@@ -1378,7 +1364,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
       score: null,
       why: t
         ? `Closest overall length (${p.fuse_length_mm ?? "—"} mm → ${t.fuse_length_mm ?? "—"} mm).`
-        : "No fuse twin.",
+        : "No fuse match.",
     });
   }
   for (const id of mastIds) {
@@ -1396,7 +1382,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
         ? p.motorIntegrated || t.motorIntegrated
           ? `Closest length (${p.length_mm ?? "—"} → ${t.length_mm ?? "—"} mm). Motor-integrated masts are a different product even when the number matches.`
           : `Closest published length (${p.length_mm ?? "—"} → ${t.length_mm ?? "—"} mm).`
-        : "No mast twin.",
+        : "No mast match.",
     });
   }
 
@@ -1531,20 +1517,18 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   const bits: string[] = [];
   if (ownedCounts.fronts) {
     bits.push(
-      `${ownedCounts.fronts} included ${brandName(from)} fronts map to ${uniqueNeeded.fronts} unique ${brandName(to)} twins` +
-        (overlap.fronts ? ` — overlap saves ${overlap.fronts} front purchase${overlap.fronts === 1 ? "" : "s"}` : ""),
+      `${ownedCounts.fronts} ${brandName(from)} front${ownedCounts.fronts === 1 ? "" : "s"} you ticked → ${uniqueNeeded.fronts} ${brandName(to)} front${uniqueNeeded.fronts === 1 ? "" : "s"}`,
     );
   }
   if (ownedCounts.masts) {
     bits.push(
-      `${ownedCounts.masts} masts → ${uniqueNeeded.masts} unique ${brandName(to)} masts` +
-        (overlap.masts ? ` (save ${overlap.masts})` : ""),
+      `${ownedCounts.masts} mast${ownedCounts.masts === 1 ? "" : "s"} → ${uniqueNeeded.masts} ${brandName(to)} mast${uniqueNeeded.masts === 1 ? "" : "s"}`,
     );
   }
   const headline = !rows.length
-    ? `Check owned parts to include them in the ${brandName(to)} conversion`
+    ? `Tick owned parts to include them in the ${brandName(to)} kit`
     : bits.join(". ") ||
-      `${uniqueNeeded.total} unique ${brandName(to)} parts cover the checked items`;
+      `${uniqueNeeded.total} ${brandName(to)} parts cover what you ticked`;
 
   const path: BrandConvert["path"] = [];
   const seed = inferSetup(doc, from);
@@ -1555,7 +1539,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
       const pathWhy = twin.why.slice(0, 3);
       if (src && convertFrontPenalty(src.front, twin.front, doc.goal, doc.disciplines) > 0) {
         pathWhy.push(
-          "Closest published-spec replacement — covering the owned setup, not a goal-forward step.",
+          "Closest published match for the setup you ride, not a step toward your goal.",
         );
       }
       path.push({
@@ -1571,7 +1555,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
       for (const r of recs) {
         const why = r.why.slice(0, 3);
         if (doc.disciplines.length && !frontFitsDisciplines(r.front, doc.disciplines)) {
-          why.push("Catalog step on the other brand; outline is outside ticked disciplines' usual lanes.");
+          why.push("A size step on the other brand; shape is a bit off the disciplines you ticked.");
         }
         path.push({
           headline: `Then on ${brandName(to)}: ${r.headline}`,
@@ -1587,7 +1571,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
       path.push({
         headline: `Start the other-brand path at ${t.familyOfficial} ${t.sizeLabel}`,
         why: [
-          `That's the nearest published-spec twin of ${shortFront(first)}. Add a ${brandName(to)} fuse + tail to make it a real setup.`,
+          `That's the closest published match for ${shortFront(first)}. Add a ${brandName(to)} fuselage and tail to make it rideable.`,
         ],
       });
     }

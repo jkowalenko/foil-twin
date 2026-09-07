@@ -100,19 +100,10 @@ export function ProgressView({
             </div>
           </div>
           {resolved && (
-            <p className="note">
-              Heuristics: smaller area → speed / less lift. Higher AR → glide /
-              less roll. Shorter fuse → looser. Smaller tail → looser yaw.
-              Recommendations stay on {brandName(setup.brand)} and only move
-              forward on the chosen goal — never a larger wing for speed or
-              smaller size, never a smaller wing for lift, never a longer fuse
-              for tighter turns, never a lower AR for glide. Up to 3, ordered
-              small → bigger (fuse/tail first, then a one-size front, then a
-              larger or family step if your skill allows). Learning stays on
-              fuse, tail, or a tiny same-family size — no family leaps. If
-              fewer strict-forward options exist, the carousel is shorter. The
-              active pick also gets the closest{" "}
-              {brandName(otherBrand(setup.brand))} twin.
+            <p className="note lede">
+              Next steps stay on {brandName(setup.brand)} and only move toward this
+              goal. Smaller changes first; a bigger front-wing step only if your
+              level allows.
             </p>
           )}
         </div>
@@ -122,10 +113,9 @@ export function ProgressView({
         {recs.length === 0 && (
           <div className="panel">
             <div className="panel-b">
-              <p className="note">
-              No next step that strictly advances this goal from this combination
-              — try another goal.
-            </p>
+              <p className="empty-state">
+                No next step for this goal from this setup — try another goal.
+              </p>
             </div>
           </div>
         )}

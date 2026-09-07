@@ -60,7 +60,7 @@ export function SpecStack({ front, fuse, tail }: Props) {
       <Row k="Area" v={n(tail.area_cm2, 2, "cm²")} />
       <Row k="Span" v={n(tail.span_mm, 0, "mm")} nullish={tail.span_mm == null} />
       <Row k="Aspect ratio" v={n(tail.aspect_ratio, 2)} nullish={tail.aspect_ratio == null} />
-      <Row k="Role (matcher)" v={tail.role} />
+      <Row k="Tail job" v={tail.role} />
     </div>
   );
 }

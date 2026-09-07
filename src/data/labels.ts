@@ -23,5 +23,6 @@ export const GOALS: { id: Goal; label: string }[] = [
 ];
 
 export const QUIVER_STORAGE_KEY = "foil-twin-quiver-v1";
+export const QUIVER_UI_STORAGE_KEY = "foil-twin-quiver-ui-v1";
 export const THEME_STORAGE_KEY = "foil-twin-theme";
 export const SETUP_STORAGE_KEY = "foil-twin-v1";

@@ -1,5 +1,5 @@
 import { catalog, fusesByBrand } from "../data/catalog";
-import { GOALS } from "../data/labels";
+import { GOALS, QUIVER_STORAGE_KEY, QUIVER_UI_STORAGE_KEY } from "../data/labels";
 import type { Goal, QuiverDoc, Setup } from "../data/types";
 import { frontTitle } from "./format";
 import {
@@ -23,6 +23,7 @@ import {
   recommendBuys,
   upsertNamedSetup,
 } from "./quiver";
+import { DEFAULT_QUIVER_UI, parseQuiverUi } from "./quiverUi";
 
 function quiverDoc(partial: Partial<QuiverDoc> & { parts: QuiverDoc["parts"] }): QuiverDoc {
   return {
@@ -35,6 +36,19 @@ function quiverDoc(partial: Partial<QuiverDoc> & { parts: QuiverDoc["parts"] }):
     goal: "more-speed",
     ...partial,
   };
+}
+
+function assertRiderConvertCopy(label: string, convert: ReturnType<typeof brandConvert>) {
+  if (!convert) throw new Error(`${label}: expected convert`);
+  const blob = [
+    convert.headline,
+    ...convert.coverageTiers.map((t) => t.note ?? ""),
+    ...convert.rangeSummaries.map((r) => r.note),
+    ...convert.coverageTiers.flatMap((t) => t.items.map((i) => i.note ?? "")),
+  ].join("\n");
+  if (/greedy|set-cover|heuristic|~80%|~90%|covering \d+\/\d+/i.test(blob)) {
+    throw new Error(`${label}: convert copy still has matcher jargon:\n${blob}`);
+  }
 }
 
 function assertCompleteKit(label: string, convert: ReturnType<typeof brandConvert>) {
@@ -477,6 +491,7 @@ if (convert) {
     throw new Error("80% coverage must include a fuse (complete rideable kit)");
   }
   assertCompleteKit("overlap 3 fronts", convert);
+  assertRiderConvertCopy("overlap 3 fronts", convert);
   const none = brandConvert(
     quiverDoc({
       parts: {
@@ -530,6 +545,7 @@ if (!r80.items.some((i) => i.kind === "fuse")) {
   throw new Error("5 ART 80% kit must include a fuse");
 }
 assertCompleteKit("5 ART fronts", rangeConvert);
+assertRiderConvertCopy("5 ART fronts", rangeConvert);
 const haRange = rangeConvert.rangeSummaries.find((r) => r.kind === "front" && r.familyOfficial === "HA Front Foil");
 if (rangeConvert.uniqueNeeded.fronts >= 3 && !haRange) {
   throw new Error("Expected HA Front Foil progressive range when 3+ HA sizes are suggested");
@@ -719,6 +735,48 @@ if (
   throw new Error("edit should add new parts without dropping previous inventory");
 }
 console.log(`upsert edit in place: ${editedSetup.setups[0].id} → ${editedSetup.setups[0].label}`);
+
+section("Quiver UI prefs (foil-twin-quiver-ui-v1)");
+if (QUIVER_UI_STORAGE_KEY !== "foil-twin-quiver-ui-v1") {
+  throw new Error(`QUIVER_UI_STORAGE_KEY must stay foil-twin-quiver-ui-v1, got ${QUIVER_UI_STORAGE_KEY}`);
+}
+if (QUIVER_STORAGE_KEY !== "foil-twin-quiver-v1") {
+  throw new Error("inventory key must stay foil-twin-quiver-v1");
+}
+const uiDefault = parseQuiverUi(null);
+if (
+  uiDefault.version !== 1 ||
+  uiDefault.sections.gaps !== true ||
+  uiDefault.sections.nextToBuy !== true ||
+  uiDefault.sections.brandConvert !== false
+) {
+  throw new Error(`UI prefs defaults wrong: ${JSON.stringify(uiDefault)}`);
+}
+if (
+  DEFAULT_QUIVER_UI.sections.gaps !== true ||
+  DEFAULT_QUIVER_UI.sections.nextToBuy !== true ||
+  DEFAULT_QUIVER_UI.sections.brandConvert !== false
+) {
+  throw new Error("DEFAULT_QUIVER_UI sections must be gaps/nextToBuy open, brandConvert closed");
+}
+const uiOn = parseQuiverUi({
+  version: 1,
+  sections: { gaps: false, nextToBuy: true, brandConvert: true },
+});
+if (uiOn.sections.gaps !== false || uiOn.sections.brandConvert !== true) {
+  throw new Error("parseQuiverUi should honor boolean section flags");
+}
+const uiJunk = parseQuiverUi({ version: 1, owner: null, parts: { frontIds: [] } });
+if (
+  uiJunk.sections.gaps !== true ||
+  uiJunk.sections.nextToBuy !== true ||
+  uiJunk.sections.brandConvert !== false
+) {
+  throw new Error("inventory-shaped blobs must not parse as UI prefs");
+}
+console.log(
+  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed`,
+);
 
 section("Quiver gaps list missing only");
 const covered = analyzeGaps(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   FAMILY_LABEL,
   FRONT_FAMILY_ORDER,
@@ -7,7 +7,7 @@ import {
   TAIL_FAMILY_ORDER,
   catalog,
 } from "../data/catalog";
-import { DISCIPLINES, GOALS, LEVELS, QUIVER_STORAGE_KEY } from "../data/labels";
+import { DISCIPLINES, GOALS, LEVELS } from "../data/labels";
 import type {
   Brand,
   Discipline,
@@ -19,7 +19,6 @@ import type {
 } from "../data/types";
 import { brandName, otherBrand } from "../lib/format";
 import {
-  FRONT_OVERLAP_MIN,
   analyzeGaps,
   brandConvert,
   listOwnedConvertParts,
@@ -32,6 +31,11 @@ import {
   upsertNamedSetup,
   type ConvertBuyItem,
 } from "../lib/quiver";
+import {
+  loadQuiverUi,
+  saveQuiverUi,
+  type QuiverUiPrefs,
+} from "../lib/quiverUi";
 import { BrandMark } from "./BrandMark";
 
 type Props = {
@@ -43,11 +47,23 @@ export function QuiverView({ onAdopt }: Props) {
   const [draft, setDraft] = useState<Omit<NamedSetup, "id">>(() => emptyDraft("axis"));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [convertOff, setConvertOff] = useState<Set<string>>(() => new Set());
+  const [ui, setUi] = useState<QuiverUiPrefs>(() => loadQuiverUi());
   const draftRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     saveQuiver(doc);
   }, [doc]);
+
+  function toggleSection(key: keyof QuiverUiPrefs["sections"]) {
+    setUi((prev) => {
+      const next: QuiverUiPrefs = {
+        version: 1,
+        sections: { ...prev.sections, [key]: !prev.sections[key] },
+      };
+      saveQuiverUi(next);
+      return next;
+    });
+  }
 
   const gaps = useMemo(() => analyzeGaps(doc), [doc]);
   const recs = useMemo(() => recommendBuys(doc), [doc]);
@@ -135,16 +151,13 @@ export function QuiverView({ onAdopt }: Props) {
         <div className="panel-h">
           <div>
             <h2>Your quiver</h2>
-            <div className="sub">
-              Browser only · key <code>{QUIVER_STORAGE_KEY}</code>
-            </div>
+            <div className="sub">Stays in this browser</div>
           </div>
         </div>
         <div className="panel-b">
-          <p className="note">
-            Inventory plus named complete setups (mast + fuse + front + tail, one brand).
-            Nothing is uploaded. Schema version 1, <code>owner: null</code> reserved for a
-            future login.
+          <p className="note lede">
+            Parts you own, plus named complete setups — mast, fuselage, front, and tail,
+            one brand.
           </p>
           <p className="note picker-hint">Tap a part to add to your quiver. Tap again to remove it.</p>
 
@@ -174,7 +187,7 @@ export function QuiverView({ onAdopt }: Props) {
           />
 
           <h3 className="quiver-h">Named setups</h3>
-          {doc.setups.length === 0 && <p className="note">No named setups yet.</p>}
+          {doc.setups.length === 0 && <p className="empty-state">No named setups yet.</p>}
           <ul className="setup-list">
             {doc.setups.map((s) => (
               <li
@@ -261,7 +274,7 @@ export function QuiverView({ onAdopt }: Props) {
             ))}
           </div>
           <div className="field">
-            <label>Level (optional, for buy recs)</label>
+            <label>Level (optional)</label>
             <div className="chips">
               {LEVELS.map((l) => (
                 <button
@@ -294,264 +307,279 @@ export function QuiverView({ onAdopt }: Props) {
       </div>
 
       <div className="quiver-right">
-        <div className="panel">
-          <div className="panel-h">
-            <div>
-              <h2>Gaps</h2>
-              <div className="sub">What this quiver still lacks for the disciplines you ticked</div>
+        <CollapsiblePanel
+          id="gaps"
+          label="Gaps"
+          title="Gaps"
+          sub="What is still missing for the disciplines you ticked"
+          open={ui.sections.gaps}
+          onToggle={() => toggleSection("gaps")}
+        >
+          {gaps.length === 0 && (
+            <p className="empty-state">Tick a discipline to see what this quiver still needs.</p>
+          )}
+          {gaps.map((g) => (
+            <div key={g.discipline} className="gap-block">
+              <h3>{DISCIPLINES.find((d) => d.id === g.discipline)?.label}</h3>
+              {g.missing.length === 0 ? (
+                <p className="note ok-note">Looks covered with what you already own.</p>
+              ) : (
+                <ul className="why">
+                  {g.missing.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-          </div>
-          <div className="panel-b">
-            {gaps.map((g) => (
-              <div key={g.discipline} className="gap-block">
-                <h3>{DISCIPLINES.find((d) => d.id === g.discipline)?.label}</h3>
-                {g.missing.length === 0 ? (
-                  <p className="note ok-note">Looks covered with what you already own.</p>
-                ) : (
-                  <ul className="why">
-                    {g.missing.map((m) => (
-                      <li key={m}>{m}</li>
-                    ))}
-                  </ul>
-                )}
+          ))}
+        </CollapsiblePanel>
+
+        <CollapsiblePanel
+          id="nextToBuy"
+          label="Next to buy"
+          title={
+            <span className="h-with-logo">
+              <BrandMark brand={home} size="sm" />
+              Next to buy
+            </span>
+          }
+          sub={`Same-brand first — you mostly ride ${brandName(home)}`}
+          open={ui.sections.nextToBuy}
+          onToggle={() => toggleSection("nextToBuy")}
+        >
+          {recs.length === 0 && (
+            <p className="empty-state">Add owned parts and a discipline to get buy suggestions.</p>
+          )}
+          <div className="twin-list">
+            {recs.map((r) => (
+              <div key={r.partId} className="buy-rec">
+                <div className="twin-top">
+                  <strong>
+                    {r.kind} · {r.title}
+                  </strong>
+                  <BrandMark brand={r.brand} size="sm" />
+                </div>
+                <p className="note" style={{ marginTop: 6 }}>
+                  {r.why}
+                </p>
               </div>
             ))}
           </div>
-        </div>
+        </CollapsiblePanel>
 
-        <div className="panel">
-          <div className="panel-h">
-            <div>
-              <h2 className="h-with-logo">
-                <BrandMark brand={home} size="sm" />
-                Next to buy
-              </h2>
-              <div className="sub">Same-brand first ({brandName(home)} majority of this quiver)</div>
-            </div>
-          </div>
-          <div className="panel-b">
-            {recs.length === 0 && (
-              <p className="note">Add owned parts and a discipline to get buy suggestions.</p>
-            )}
-            <div className="twin-list">
-              {recs.map((r) => (
-                <div key={r.partId} className="buy-rec">
-                  <div className="twin-top">
-                    <strong>
-                      {r.kind} · {r.title}
-                    </strong>
-                    <BrandMark brand={r.brand} size="sm" />
-                  </div>
-                  <p className="note" style={{ marginTop: 6 }}>
-                    {r.why}
-                  </p>
+        <CollapsiblePanel
+          id="brandConvert"
+          label="Brand convert"
+          title={
+            <span className="h-with-logo">
+              <BrandMark brand={otherBrand(home)} size="sm" />
+              Brand convert
+            </span>
+          }
+          sub={`Starter and more-complete ${brandName(otherBrand(home))} kits closest to what you ride`}
+          open={ui.sections.brandConvert}
+          onToggle={() => toggleSection("brandConvert")}
+        >
+          {!convert && (
+            <p className="empty-state">Add a part you own to see the other brand.</p>
+          )}
+          {convert && (
+            <>
+              {ownedConvert.length > 0 && (
+                <div className="convert-include">
+                  <div className="convert-kind-h">Tick parts to include</div>
+                  {(["front", "tail", "fuse", "mast"] as const).map((kind) => {
+                    const items = ownedConvert.filter((p) => p.kind === kind);
+                    if (!items.length) return null;
+                    const kindLabel =
+                      kind === "front"
+                        ? "Front wings"
+                        : kind === "tail"
+                          ? "Tails"
+                          : kind === "fuse"
+                            ? "Fuselages"
+                            : "Masts";
+                    return (
+                      <div key={kind} className="convert-kind">
+                        <div className="convert-kind-h">{kindLabel}</div>
+                        <div className="convert-checks">
+                          {items.map((p) => {
+                            const on = !convertOff.has(p.id);
+                            return (
+                              <label key={p.id} className={on ? "" : "off"}>
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={() => toggleConvert(p.id)}
+                                />
+                                {p.title}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="convert-headline">{convert.headline}.</p>
+              <div className="pills">
+                <span className="pill">
+                  Fronts {convert.ownedCounts.fronts} → {convert.uniqueNeeded.fronts} to buy
+                </span>
+                <span className="pill">
+                  Tails {convert.ownedCounts.tails} → {convert.uniqueNeeded.tails} to buy
+                </span>
+                <span className="pill">
+                  Fuses {convert.ownedCounts.fuses} → {convert.uniqueNeeded.fuses} to buy
+                </span>
+                <span className="pill">
+                  Masts {convert.ownedCounts.masts} → {convert.uniqueNeeded.masts} to buy
+                </span>
+                <span className="pill">
+                  {convert.uniqueNeeded.total} {brandName(convert.to)} parts cover what you ticked
+                </span>
+                {convert.overlapSaved > 0 && (
+                  <span className="pill save-pill">Fewer buys than a one-for-one swap</span>
+                )}
+              </div>
+              {convert.frontOverlaps.length > 0 && (
+                <div className="overlap-list">
+                  <h3>One other-brand front can stand in for several you own</h3>
+                  {convert.frontOverlaps.map((g) => (
+                    <div key={g.twinId} className="overlap-card">
+                      <strong>{g.twinTitle}</strong> can stand in for{" "}
+                      {g.owned.map((o) => o.title).join(", ")}. One buy instead of{" "}
+                      {g.owned.length}.
+                    </div>
+                  ))}
+                </div>
+              )}
+              <h3 className="quiver-h">Suggested kits</h3>
+              {convert.coverageTiers.map((tier) => (
+                <div key={tier.pct} className={`convert-tier convert-tier-${tier.pct}`}>
+                  <h3>{tier.pct === 80 ? "Simplified kit" : "Fuller kit"}</h3>
+                  <p className="convert-tier-meta">{tier.note}</p>
+                  {tier.items.length === 0 ? (
+                    <p className="note">No other-brand buys in this kit.</p>
+                  ) : (
+                    <div className="buy-list">
+                      {tier.items.map((item) => (
+                        <ConvertBuyCard key={`${tier.pct}-${item.kind}-${item.twinId}`} item={item} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-h">
-            <div>
-              <h2 className="h-with-logo">
-                <BrandMark brand={otherBrand(home)} size="sm" />
-                Brand convert
-              </h2>
-              <div className="sub">
-                Complete rideable {brandName(otherBrand(home))} kits: a simplified
-                progression kit (~80%) and fuller coverage / further progression
-                (~90%). Picks follow your disciplines, level, and goal — not only
-                nearest twins. Fronts sharing a twin at {FRONT_OVERLAP_MIN}%+
-                collapse. Include-checkboxes choose which owned parts to cover.
-              </div>
-            </div>
-          </div>
-          <div className="panel-b">
-            {!convert && <p className="note">Own at least one part to map the other brand.</p>}
-            {convert && (
-              <>
-                {ownedConvert.length > 0 && (
-                  <div className="convert-include">
-                    <div className="convert-kind-h">Include in conversion</div>
-                    {(["front", "tail", "fuse", "mast"] as const).map((kind) => {
-                      const items = ownedConvert.filter((p) => p.kind === kind);
-                      if (!items.length) return null;
-                      const kindLabel =
-                        kind === "front"
-                          ? "Front wings"
-                          : kind === "tail"
-                            ? "Tails"
-                            : kind === "fuse"
-                              ? "Fuselages"
-                              : "Masts";
-                      return (
-                        <div key={kind} className="convert-kind">
-                          <div className="convert-kind-h">{kindLabel}</div>
-                          <div className="convert-checks">
-                            {items.map((p) => {
-                              const on = !convertOff.has(p.id);
-                              return (
-                                <label key={p.id} className={on ? "" : "off"}>
-                                  <input
-                                    type="checkbox"
-                                    checked={on}
-                                    onChange={() => toggleConvert(p.id)}
-                                  />
-                                  {p.title}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <p className="convert-headline">{convert.headline}.</p>
-                <div className="pills">
-                  <span className="pill">
-                    Fronts {convert.ownedCounts.fronts} → {convert.uniqueNeeded.fronts} unique
-                    {convert.overlap.fronts ? ` · save ${convert.overlap.fronts}` : ""}
-                  </span>
-                  <span className="pill">
-                    Tails {convert.ownedCounts.tails} → {convert.uniqueNeeded.tails} unique
-                    {convert.overlap.tails ? ` · save ${convert.overlap.tails}` : ""}
-                  </span>
-                  <span className="pill">
-                    Fuses {convert.ownedCounts.fuses} → {convert.uniqueNeeded.fuses} unique
-                    {convert.overlap.fuses ? ` · save ${convert.overlap.fuses}` : ""}
-                  </span>
-                  <span className="pill">
-                    Masts {convert.ownedCounts.masts} → {convert.uniqueNeeded.masts} unique
-                    {convert.overlap.masts ? ` · save ${convert.overlap.masts}` : ""}
-                  </span>
-                  <span className="pill">
-                    {convert.uniqueNeeded.total} unique {brandName(convert.to)} parts to cover checked items
-                  </span>
-                  {convert.coverageTiers.map((tier) => (
-                    <span key={`pill-${tier.pct}`} className="pill">
-                      {tier.pct === 80 ? "Simplified kit" : "Fuller coverage"} ~{tier.pct}% ·{" "}
-                      {tier.items.length} unique · {tier.coveredOwned}/{tier.totalOwned} parts
-                    </span>
-                  ))}
-                  {convert.overlapSaved > 0 && (
-                    <span className="pill save-pill">
-                      Overlap saves {convert.overlapSaved} purchase
-                      {convert.overlapSaved === 1 ? "" : "s"} vs a 1:1 swap
-                    </span>
-                  )}
-                </div>
-                {convert.frontOverlaps.length > 0 && (
-                  <div className="overlap-list">
-                    <h3>Shared other-brand fronts ({FRONT_OVERLAP_MIN}%+)</h3>
-                    {convert.frontOverlaps.map((g) => (
-                      <div key={g.twinId} className="overlap-card">
-                        <strong>{g.twinTitle}</strong> covers{" "}
-                        {g.owned
-                          .map((o) => `${o.title} (${Math.round(o.score)}%)`)
-                          .join(", ")}
-                        . {g.owned.length} owned fronts → 1 buy
-                        <span className="savings">
-                          {" "}
-                          — save {g.save} purchase{g.save === 1 ? "" : "s"}
-                        </span>
-                        .
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <h3 className="quiver-h">Coverage</h3>
-                {convert.coverageTiers.map((tier) => (
-                  <div key={tier.pct} className={`convert-tier convert-tier-${tier.pct}`}>
-                    <h3>
-                      {tier.pct === 80
-                        ? "Simplified progression kit"
-                        : "Fuller coverage / further progression"}
-                      <span className="sub"> ~{tier.pct}%</span>
-                    </h3>
-                    <p className="convert-tier-meta">{tier.note}</p>
-                    {tier.items.length === 0 ? (
-                      <p className="note">No other-brand buys in this tier.</p>
-                    ) : (
-                      <div className="buy-list">
-                        {tier.items.map((item) => (
-                          <ConvertBuyCard key={`${tier.pct}-${item.kind}-${item.twinId}`} item={item} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {convert.rangeSummaries.length > 0 && (
-                  <div className="convert-ranges">
-                    {convert.rangeSummaries.map((r) => (
-                      <p key={`${r.kind}-${r.familyOfficial}-${r.minId}`} className="convert-range">
-                        {r.note}
-                      </p>
-                    ))}
-                  </div>
-                )}
-                {convert.buyList.length > 0 &&
-                  convert.buyList.length !==
-                    (convert.coverageTiers.find((t) => t.pct === 90)?.items.length ?? 0) && (
-                    <>
-                      <h3 className="quiver-h">All unique twins</h3>
-                      <div className="buy-list">
-                        {convert.buyList.map((item) => (
-                          <ConvertBuyCard key={`all-${item.kind}-${item.twinId}`} item={item} />
-                        ))}
-                      </div>
-                    </>
-                  )}
-                {convert.buyList.length === 0 &&
-                  convert.coverageTiers.every((t) => t.items.length === 0) && (
-                    <p className="note">
-                      Nothing to buy until checked owned parts map to other-brand twins.
+              {convert.rangeSummaries.length > 0 && (
+                <div className="convert-ranges">
+                  {convert.rangeSummaries.map((r) => (
+                    <p key={`${r.kind}-${r.familyOfficial}-${r.minId}`} className="convert-range">
+                      {r.note}
                     </p>
-                  )}
-                {convert.tableRows.length > 0 && (
-                  <table className="convert-table">
-                    <thead>
-                      <tr>
-                        <th>You own ({brandName(convert.from)})</th>
-                        <th>Nearest {brandName(convert.to)}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {convert.tableRows.map((r) => (
-                        <tr key={`${r.kind}-${r.ownedId}`}>
-                          <td>
-                            <span className="kind-tag">{r.kind}</span> {r.ownedTitle}
-                          </td>
-                          <td>
-                            {r.twinTitle ?? "—"}
-                            {r.score != null ? ` · ${Math.round(r.score)}%` : ""}
-                            <div className="sub">{r.why}</div>
-                          </td>
-                        </tr>
+                  ))}
+                </div>
+              )}
+              {convert.buyList.length > 0 &&
+                convert.buyList.length !==
+                  (convert.coverageTiers.find((t) => t.pct === 90)?.items.length ?? 0) && (
+                  <>
+                    <h3 className="quiver-h">All unique matches</h3>
+                    <div className="buy-list">
+                      {convert.buyList.map((item) => (
+                        <ConvertBuyCard key={`all-${item.kind}-${item.twinId}`} item={item} />
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </>
                 )}
-                {convert.path.length > 0 && (
-                  <div className="convert-path">
-                    <h3>If you switched brands</h3>
-                    {convert.path.map((p) => (
-                      <div key={p.headline} className="path-card">
-                        <strong>{p.headline}</strong>
-                        <ul className="why">
-                          {p.why.map((w) => (
-                            <li key={w}>{w}</li>
-                          ))}
-                        </ul>
-                      </div>
+              {convert.buyList.length === 0 &&
+                convert.coverageTiers.every((t) => t.items.length === 0) && (
+                  <p className="empty-state">Tick owned parts to see other-brand matches.</p>
+                )}
+              {convert.tableRows.length > 0 && (
+                <table className="convert-table">
+                  <thead>
+                    <tr>
+                      <th>You own ({brandName(convert.from)})</th>
+                      <th>Closest {brandName(convert.to)}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {convert.tableRows.map((r) => (
+                      <tr key={`${r.kind}-${r.ownedId}`}>
+                        <td>
+                          <span className="kind-tag">{r.kind}</span> {r.ownedTitle}
+                        </td>
+                        <td>
+                          {r.twinTitle ?? "—"}
+                          <div className="sub">{r.why}</div>
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+                  </tbody>
+                </table>
+              )}
+              {convert.path.length > 0 && (
+                <div className="convert-path">
+                  <h3>If you switched brands</h3>
+                  {convert.path.map((p) => (
+                    <div key={p.headline} className="path-card">
+                      <strong>{p.headline}</strong>
+                      <ul className="why">
+                        {p.why.map((w) => (
+                          <li key={w}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </CollapsiblePanel>
+      </div>
+    </div>
+  );
+}
+
+function CollapsiblePanel({
+  id,
+  label,
+  title,
+  sub,
+  open,
+  onToggle,
+  children,
+}: {
+  id: string;
+  label: string;
+  title: ReactNode;
+  sub?: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const bodyId = `quiver-section-${id}`;
+  return (
+    <div className={`panel${open ? "" : " collapsed"}`}>
+      <div className="panel-h collapsible-h">
+        <button
+          type="button"
+          className="panel-toggle"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          aria-label={label}
+          onClick={onToggle}
+        >
+          <span className="panel-toggle-text">
+            <span className="panel-title">{title}</span>
+            {sub ? <span className="sub">{sub}</span> : null}
+          </span>
+          <span className={`chevron${open ? " open" : ""}`} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="panel-b" id={bodyId} hidden={!open}>
+        {children}
       </div>
     </div>
   );
@@ -571,27 +599,19 @@ function ConvertBuyCard({ item }: { item: ConvertBuyItem }) {
         {completeness ? (
           <span className="kit-tag">complete setup</span>
         ) : noCovers ? (
-          <span className="kit-tag">progression</span>
+          <span className="kit-tag">next step</span>
         ) : item.covers.length > 1 ? (
-          <span className="savings">
-            covers {item.covers.length} · save {item.covers.length - 1}
-          </span>
+          <span className="savings">covers {item.covers.length} you own</span>
         ) : null}
       </div>
       {noCovers ? (
         <p className="note convert-buy-note" style={{ marginTop: 6 }}>
-          {item.note ?? "Recommended for complete setup"}
+          {item.note ?? "Included for a complete setup"}
         </p>
       ) : (
         <>
           <p className="note" style={{ marginTop: 6 }}>
-            Covers {item.covers.map((c) => c.ownedTitle).join(", ")}
-            {item.covers.some((c) => c.score != null)
-              ? ` (${item.covers
-                  .filter((c) => c.score != null)
-                  .map((c) => `${Math.round(c.score as number)}%`)
-                  .join(", ")})`
-              : ""}
+            Stands in for {item.covers.map((c) => c.ownedTitle).join(", ")}
           </p>
           {item.note && <p className="note convert-buy-note">{item.note}</p>}
         </>

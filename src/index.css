@@ -99,6 +99,12 @@ input {
   font: inherit;
   color: inherit;
 }
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--arm);
+  outline-offset: 2px;
+}
 
 .app {
   min-height: 100dvh;
@@ -166,6 +172,9 @@ input {
   font-size: 12px;
   font-weight: 560;
 }
+.nav button:hover {
+  color: var(--text);
+}
 .nav button.active {
   background: linear-gradient(180deg, rgba(62, 201, 192, 0.18), rgba(232, 160, 90, 0.12));
   color: var(--text);
@@ -209,9 +218,19 @@ input {
   overflow: hidden;
 }
 .panel h2,
-.panel h3 {
+.panel h3,
+.panel-title {
   margin: 0;
-  font-weight: 560;
+  font-weight: 600;
+}
+.panel h2,
+.panel-title {
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.panel h3 {
+  font-size: 0.95rem;
 }
 .panel-h {
   padding: 14px 16px 10px;
@@ -224,9 +243,73 @@ input {
 .panel-h .sub {
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.4;
+  font-weight: 420;
 }
 .panel-b {
   padding: 14px 16px 16px;
+}
+.panel-b > .note:first-child,
+.panel-b > .picker-hint:first-child {
+  margin-top: 0;
+}
+
+.panel.collapsed .panel-h {
+  border-bottom: none;
+}
+.panel-h.collapsible-h {
+  padding: 0;
+  align-items: stretch;
+}
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: inherit;
+  border-radius: 0;
+}
+.panel:not(.collapsed) .panel-toggle {
+  padding-bottom: 10px;
+}
+.panel-toggle:hover {
+  background: var(--elev-2);
+}
+.panel-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.panel-toggle-text .sub {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 420;
+}
+.chevron {
+  flex-shrink: 0;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.16s ease, border-color 0.16s ease;
+  margin-right: 6px;
+}
+.chevron.open {
+  transform: rotate(45deg);
+  margin-top: -3px;
+}
+.panel-toggle:hover .chevron {
+  border-color: var(--text);
 }
 
 .brand-toggle {
@@ -241,6 +324,9 @@ input {
   border-radius: 12px;
   padding: 10px 8px;
   cursor: pointer;
+}
+.brand-toggle button:hover {
+  border-color: var(--line-strong);
 }
 .brand-toggle.logos-only button {
   display: flex;
@@ -330,10 +416,16 @@ input {
   font-size: 12px;
   line-height: 1.45;
 }
+.note.lede {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
 
 .twin-list {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 .twin-card {
   text-align: left;
@@ -459,14 +551,20 @@ input {
   border: 1px solid var(--line);
   background: transparent;
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
   color: var(--muted);
+  min-height: 32px;
+}
+.toggles button:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
 }
 .toggles button.on {
   color: var(--text);
   border-color: var(--arm);
+  background: var(--arm-on-bg);
 }
 
 .compare-front {
@@ -483,6 +581,10 @@ input {
   cursor: pointer;
   text-align: left;
   width: 100%;
+}
+.compare-item:hover {
+  border-color: var(--line-strong);
+  background: var(--elev-2);
 }
 .compare-item .t {
   display: flex;
@@ -517,7 +619,7 @@ input {
 .progress-card {
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 14px;
+  padding: 16px;
   background: var(--card-inner);
   margin-bottom: 12px;
 }
@@ -536,9 +638,14 @@ input {
   background: var(--control-bg);
   color: var(--muted);
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 7px 12px;
   cursor: pointer;
   font-size: 12px;
+  min-height: 32px;
+}
+.chip:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--text);
 }
 .chip.on {
   color: var(--text);
@@ -779,7 +886,8 @@ input {
 
 .quiver-right {
   display: grid;
-  gap: 16px;
+  gap: 18px;
+  align-content: start;
 }
 .quiver-h {
   margin: 16px 0 8px;
@@ -801,7 +909,9 @@ input {
   font-weight: 560;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
+  min-height: 32px;
 }
 .picker-fam {
   margin: 8px 0;
@@ -819,26 +929,38 @@ input {
   padding: 0;
   margin: 0 0 12px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 .setup-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: center;
+  gap: 12px;
+  align-items: start;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--card-inner);
 }
 .setup-row.editing {
   border-color: var(--arm);
 }
+.setup-row > .brand-mark {
+  margin-top: 4px;
+}
 .setup-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
-  justify-content: flex-end;
+  align-items: stretch;
+  min-width: 8.75rem;
+}
+.setup-actions .chip {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
 }
 .setup-draft {
   margin-bottom: 12px;
@@ -851,6 +973,9 @@ input {
 }
 .gap-block {
   margin-bottom: 14px;
+}
+.gap-block:last-child {
+  margin-bottom: 0;
 }
 .gap-block h3 {
   margin: 0 0 6px;
@@ -866,7 +991,7 @@ input {
   background: var(--card-inner);
 }
 .empty-state {
-  padding: 16px 8px 8px;
+  padding: 8px 2px 4px;
   color: var(--muted);
   font-size: 14px;
   line-height: 1.5;
@@ -906,8 +1031,12 @@ input {
   cursor: pointer;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 4px 10px 4px 8px;
+  padding: 5px 10px 5px 8px;
   background: var(--card-inner);
+  min-height: 32px;
+}
+.convert-checks label:hover {
+  border-color: var(--line-strong);
 }
 .convert-checks label.off {
   opacity: 0.55;
@@ -963,9 +1092,12 @@ input {
 .convert-tier {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 12px;
   margin: 0 0 10px;
   background: var(--card-inner);
+}
+.convert-tier:last-child {
+  margin-bottom: 0;
 }
 .convert-tier-90 {
   border-color: var(--line-strong);
@@ -1076,5 +1208,9 @@ code {
   }
   .setup-actions {
     grid-column: 1 / -1;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
   }
 }

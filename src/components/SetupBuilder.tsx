@@ -147,9 +147,8 @@ export function SetupBuilder({ setup, onChange }: Props) {
         </select>
       </div>
       <p className="note">
-        Complete {brandName(setup.brand)} setup. Twin ranking uses published
-        area, span, AR, fuse length, and tail role. Nulls are skipped, not
-        guessed.
+        Pick a complete {brandName(setup.brand)} setup. Twin uses published sizes
+        only — unpublished numbers are skipped, not guessed.
       </p>
     </div>
   );

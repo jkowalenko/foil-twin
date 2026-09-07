@@ -94,7 +94,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
         <div className="panel-h map-h">
           <div>
             <h2>Front map</h2>
-            <div className="sub">Area (log) vs {yMode === "ar" ? "aspect ratio" : "span"}</div>
+            <div className="sub">Area vs {yMode === "ar" ? "aspect ratio" : "span"}</div>
           </div>
           <div className="map-controls">
             <div className="field map-picker">
@@ -375,7 +375,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
               {selected && <BrandMark brand={selected.brand} size="sm" />}
               Part compare
             </h2>
-            <div className="sub">Same AR class and ≥66% only</div>
+            <div className="sub">Same shape class only</div>
           </div>
         </div>
         <div className="panel-b compare-front">
@@ -390,14 +390,14 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 <span className="pill">{n(selected.span_mm, 0, "mm")}</span>
                 <span className="pill">AR {n(selected.aspect_ratio, 2)}</span>
                 {selectedClass && (
-                  <span className="pill">{selectedClass} AR class</span>
+                  <span className="pill">{selectedClass} shape class</span>
                 )}
               </div>
               {twins.length === 0 && (
                 <p className="note">
                   {selectedClass == null
-                    ? "No published aspect ratio, so this wing is not paired across AR classes."
-                    : `No other-brand fronts in the ${selectedClass} AR class at ≥${MIN_MAP_FRONT}%.`}
+                    ? "No published aspect ratio, so this wing is not grouped by shape class."
+                    : `No close other-brand fronts in this ${selectedClass} shape class.`}
                 </p>
               )}
               {twins.map((t) => (

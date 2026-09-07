@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Setup } from "../data/types";
-import { frontById } from "../data/catalog";
 import { brandName, otherBrand, setupLabel } from "../lib/format";
 import { MIN_FRONT_TWIN, groupTwinsByFront, rankTwins, resolveSetup } from "../lib/match";
 import { BrandMark } from "./BrandMark";
@@ -63,19 +62,16 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
               {brandName(otherBrand(setup.brand))} twin setups
             </h2>
             <div className="sub">
-              Complete setups whose front wing is {MIN_FRONT_TWIN}% match or
-              better. Grouped by front wing. Ranked by overall score (62% front /
-              23% tail / 15% fuse).
+              Other-brand setups that feel closest to what you ride, grouped by front
+              wing.
             </div>
           </div>
         </div>
         <div className="panel-b twin-list">
           {groups.length === 0 && (
             <div className="empty-state">
-              No complete {brandName(otherBrand(setup.brand))} twin setups with a{" "}
-              {MIN_FRONT_TWIN}% front wing match or better. Overall score is
-              still used to rank, but a weaker front stays hidden instead of
-              being dressed up as a twin.
+              No close {brandName(otherBrand(setup.brand))} twins for this front.
+              Try another size or family.
             </div>
           )}
           {groups.map((g, i) => {
@@ -128,10 +124,8 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
           )}
           {twins[0] && (
             <p className="note">
-              Front {frontById(twins[0].front.id)?.familyOfficial} is the closest
-              other-brand wing by published area / span / AR. Tail role mapping:
-              Skinny ≈ Speed, Progressive ≈ Dart, Skinny Surf ≈ Surf. Fuse
-              matching is overall length only.
+              Closest other-brand parts by published size and shape — not a
+              guarantee of identical feel.
             </p>
           )}
         </div>
