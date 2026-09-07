@@ -177,6 +177,7 @@ const WANT_TAIL: Record<Discipline, TailWing["role"] | null> = {
 export type QuiverGap = {
   discipline: Discipline;
   missing: string[];
+  /** Always empty — gaps UI lists missing items only, never the full quiver. */
   have: string[];
 };
 
@@ -187,7 +188,6 @@ export function analyzeGaps(doc: QuiverDoc): QuiverGap[] {
   const tails = ownedTails(doc);
   return doc.disciplines.map((discipline) => {
     const missing: string[] = [];
-    const have: string[] = [];
     const band = MAST_BAND[discipline];
     const mastOk = masts.filter((m) => (m.length_mm ?? 0) >= band.min);
     if (!masts.length) {
@@ -197,8 +197,6 @@ export function analyzeGaps(doc: QuiverDoc): QuiverGap[] {
       missing.push(
         `Mast is short for ${discipline}: longest you own is ${shortMast(longest)}. ${band.ideal}.`,
       );
-    } else {
-      have.push(`Mast coverage: ${mastOk.map(shortMast).join(", ")}`);
     }
 
     const lanes = WANT_LANES[discipline];
@@ -207,16 +205,12 @@ export function analyzeGaps(doc: QuiverDoc): QuiverGap[] {
       missing.push("No front wing in the quiver.");
     } else if (!laneHits.length) {
       missing.push(
-        `No ${discipline}-shaped front yet. You own ${fronts.map(shortFront).join(", ")} — look at ${lanes.join(" / ")} families.`,
+        `No ${discipline}-shaped front yet. Look at ${lanes.join(" / ")} families.`,
       );
-    } else {
-      have.push(`Fronts that fit ${discipline}: ${laneHits.map(shortFront).join(", ")}`);
     }
 
     if (!fuses.length) {
       missing.push("No fuselage. Twin matching still needs a fuse even if mast length is the bigger feel change.");
-    } else {
-      have.push(`Fuses: ${fuses.map((f) => f.sizeLabel).join(", ")}`);
     }
 
     const role = WANT_TAIL[discipline];
@@ -224,17 +218,11 @@ export function analyzeGaps(doc: QuiverDoc): QuiverGap[] {
       missing.push("No tail / stabilizer.");
     } else if (role && !tails.some((t) => t.role === role)) {
       missing.push(
-        `${discipline} usually wants a ${role === "speed" ? "Skinny / Speed (glide, locked yaw)" : "Surf (roll + yaw)"} tail. You own ${tails.map((t) => `${t.familyOfficial} ${t.sizeLabel}`).join(", ")}.`,
+        `${discipline} usually wants a ${role === "speed" ? "Skinny / Speed (glide, locked yaw)" : "Surf (roll + yaw)"} tail.`,
       );
-    } else {
-      have.push(`Tails: ${tails.map((t) => `${t.familyOfficial} ${t.sizeLabel}`).join(", ")}`);
     }
 
-    if (fronts.length && fuses.length && tails.length && mastOk.length) {
-      have.push("You can bolt together a complete setup for this discipline.");
-    }
-
-    return { discipline, missing, have };
+    return { discipline, missing, have: [] };
   });
 }
 
@@ -1629,6 +1617,32 @@ export function newNamedSetup(partial: Omit<NamedSetup, "id">): NamedSetup {
       ? crypto.randomUUID()
       : `setup-${Date.now()}`;
   return { ...partial, id };
+}
+
+export function ensurePartsForSetup(
+  parts: QuiverDoc["parts"],
+  setup: Pick<NamedSetup, "mastId" | "fuseId" | "frontId" | "tailId">,
+): QuiverDoc["parts"] {
+  const add = (list: string[], id: string) =>
+    id && !list.includes(id) ? [...list, id] : list;
+  return {
+    mastIds: add(parts.mastIds, setup.mastId),
+    fuseIds: add(parts.fuseIds, setup.fuseId),
+    frontIds: add(parts.frontIds, setup.frontId),
+    tailIds: add(parts.tailIds, setup.tailId),
+  };
+}
+
+/** Insert or replace a named setup by `id`, and ensure its parts are in inventory. */
+export function upsertNamedSetup(doc: QuiverDoc, setup: NamedSetup): QuiverDoc {
+  const idx = doc.setups.findIndex((s) => s.id === setup.id);
+  const setups =
+    idx >= 0 ? doc.setups.map((s, i) => (i === idx ? setup : s)) : [...doc.setups, setup];
+  return {
+    ...doc,
+    setups,
+    parts: ensurePartsForSetup(doc.parts, setup),
+  };
 }
 
 export function setupToTwin(s: NamedSetup): Setup {

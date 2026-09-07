@@ -275,7 +275,16 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 tabIndex={0}
                 role="button"
               >
-                {isSel && <circle cx={cx} cy={cy} r="18" fill="url(#glow)" />}
+                {isSel && (
+                  <circle
+                    className="dot-halo"
+                    cx={cx}
+                    cy={cy}
+                    r="18"
+                    fill="url(#glow)"
+                    pointerEvents="none"
+                  />
+                )}
                 <circle
                   cx={cx}
                   cy={cy}
@@ -291,11 +300,14 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 />
                 {isSel && (
                   <text
-                    x={cx + 12}
+                    className="dot-label"
+                    x={cx > layout.W - 160 ? cx - 12 : cx + 12}
                     y={cy - 10}
                     fill="var(--text)"
                     fontSize="12"
                     fontFamily="Outfit"
+                    textAnchor={cx > layout.W - 160 ? "end" : "start"}
+                    pointerEvents="none"
                   >
                     {shortFront(p)}
                   </text>

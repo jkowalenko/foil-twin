@@ -32,6 +32,7 @@
   --chip-on-bg: rgba(232, 160, 90, 0.12);
   --arm-on-bg: rgba(62, 201, 192, 0.12);
   --radius: 18px;
+  --sidebar-w: minmax(320px, 400px);
   --font: "Outfit", system-ui, sans-serif;
   --display: "Fraunces", Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -192,14 +193,11 @@ input {
   color: var(--arm-2);
 }
 
-.grid-2 {
+.grid-2,
+.grid-progress,
+.quiver-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 380px) 1fr;
-  gap: 18px;
-}
-.grid-progress {
-  display: grid;
-  grid-template-columns: minmax(320px, 400px) 1fr;
+  grid-template-columns: var(--sidebar-w) 1fr;
   gap: 18px;
 }
 
@@ -431,6 +429,11 @@ input {
 .dot {
   cursor: pointer;
 }
+.dot-label,
+.dot-halo,
+.dot text {
+  pointer-events: none;
+}
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -541,10 +544,37 @@ input {
   color: var(--text);
   border-color: var(--axis);
   background: var(--chip-on-bg);
+  font-weight: 560;
 }
 .chip.on.arm {
   border-color: var(--arm);
   background: var(--arm-on-bg);
+}
+.part-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.part-chip .chip-mark {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--faint);
+  line-height: 1;
+}
+.part-chip.on .chip-mark {
+  color: var(--ok);
+}
+.logo-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 12px;
+}
+.picker-hint {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 13px;
 }
 
 .nullish {
@@ -747,11 +777,6 @@ input {
   cursor: default;
 }
 
-.quiver-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 420px) 1fr;
-  gap: 18px;
-}
 .quiver-right {
   display: grid;
   gap: 16px;
@@ -798,7 +823,7 @@ input {
 }
 .setup-row {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   gap: 10px;
   align-items: center;
   border: 1px solid var(--line);
@@ -806,8 +831,23 @@ input {
   padding: 8px 10px;
   background: var(--card-inner);
 }
+.setup-row.editing {
+  border-color: var(--arm);
+}
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
 .setup-draft {
   margin-bottom: 12px;
+}
+.setup-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 .gap-block {
   margin-bottom: 14px;
@@ -1033,5 +1073,8 @@ code {
   }
   .setup-row {
     grid-template-columns: auto 1fr;
+  }
+  .setup-actions {
+    grid-column: 1 / -1;
   }
 }

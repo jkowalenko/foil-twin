@@ -15,7 +15,14 @@ import {
 } from "./match";
 import { isStrictForward, longerFuse, nextSetups, shorterFuse, type NextSetup } from "./progression";
 import type { RiderLevel } from "../data/types";
-import { FRONT_OVERLAP_MIN, brandConvert, recommendBuys } from "./quiver";
+import {
+  FRONT_OVERLAP_MIN,
+  analyzeGaps,
+  brandConvert,
+  newNamedSetup,
+  recommendBuys,
+  upsertNamedSetup,
+} from "./quiver";
 
 function quiverDoc(partial: Partial<QuiverDoc> & { parts: QuiverDoc["parts"] }): QuiverDoc {
   return {
@@ -674,6 +681,88 @@ console.log(`fuse-adjacency fails=${fuseAdjFail}`);
 if (fuseAdjFail) {
   throw new Error(`Progression fuse adjacency failed ${fuseAdjFail} check(s)`);
 }
+
+section("Quiver named-setup upsert");
+const setupSeed = quiverDoc({
+  parts: { mastIds: [], fuseIds: [], frontIds: [], tailIds: [] },
+});
+const named = newNamedSetup({
+  label: "Daily",
+  brand: "axis",
+  mastId: "axis-al19-750",
+  fuseId: "axis-advplus-short",
+  frontId: "axis-artv2-879",
+  tailId: "axis-skinny-360-45",
+});
+const addedSetup = upsertNamedSetup(setupSeed, named);
+if (addedSetup.setups.length !== 1 || addedSetup.setups[0].id !== named.id) {
+  throw new Error("upsert should insert a named setup with stable id");
+}
+if (!addedSetup.parts.frontIds.includes("axis-artv2-879")) {
+  throw new Error("upsert should ensure setup parts are in inventory");
+}
+const editedSetup = upsertNamedSetup(addedSetup, {
+  ...named,
+  label: "Daily wing",
+  frontId: "axis-surge-950",
+});
+if (editedSetup.setups.length !== 1) {
+  throw new Error("edit must update the existing setup by id, not append");
+}
+if (editedSetup.setups[0].label !== "Daily wing" || editedSetup.setups[0].frontId !== "axis-surge-950") {
+  throw new Error("edit did not persist label/parts on the same id");
+}
+if (
+  !editedSetup.parts.frontIds.includes("axis-surge-950") ||
+  !editedSetup.parts.frontIds.includes("axis-artv2-879")
+) {
+  throw new Error("edit should add new parts without dropping previous inventory");
+}
+console.log(`upsert edit in place: ${editedSetup.setups[0].id} → ${editedSetup.setups[0].label}`);
+
+section("Quiver gaps list missing only");
+const covered = analyzeGaps(
+  quiverDoc({
+    disciplines: ["wing", "surf"],
+    parts: {
+      mastIds: ["axis-al19-750"],
+      fuseIds: ["axis-advplus-short"],
+      frontIds: ["axis-artv2-879", "axis-surge-950"],
+      tailIds: ["axis-skinny-360-45", "axis-surfskinny-320-48"],
+    },
+  }),
+);
+for (const g of covered) {
+  const haveBlob = g.have.join(" · ");
+  if (/Mast coverage:|Fronts that fit|Fuses:|Tails:/.test(haveBlob)) {
+    throw new Error(`${g.discipline} dumped inventory into have: ${haveBlob}`);
+  }
+  if (g.have.length > 0) {
+    throw new Error(`${g.discipline} have should stay empty (gaps-only UI), got ${haveBlob}`);
+  }
+}
+const raceGaps = analyzeGaps(
+  quiverDoc({
+    disciplines: ["race"],
+    parts: {
+      mastIds: ["axis-al19-450"],
+      fuseIds: [],
+      frontIds: ["axis-spitfire-840"],
+      tailIds: ["axis-surfskinny-320-48"],
+    },
+  }),
+);
+const race = raceGaps.find((g) => g.discipline === "race");
+if (!race || race.missing.length < 3) {
+  throw new Error(`race should report mast/front/fuse/tail gaps, got ${race?.missing.join(" | ") ?? "none"}`);
+}
+if (race.have.length) {
+  throw new Error(`race have should not list inventory: ${race.have.join(" · ")}`);
+}
+if (race.missing.some((m) => /You own /.test(m))) {
+  throw new Error(`race missing text listed inventory: ${race.missing.join(" | ")}`);
+}
+console.log(`race gaps (${race.missing.length}): ${race.missing.join(" | ")}`);
 
 section("Mast twins (length)");
 for (const id of ["axis-al19-750", "axis-pro-800", "arm-pmk2-795", "arm-alloy-72"]) {

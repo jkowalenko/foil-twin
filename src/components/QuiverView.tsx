@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FAMILY_LABEL,
   FRONT_FAMILY_ORDER,
@@ -17,7 +17,7 @@ import type {
   RiderLevel,
   Setup,
 } from "../data/types";
-import { brandName, n, otherBrand } from "../lib/format";
+import { brandName, otherBrand } from "../lib/format";
 import {
   FRONT_OVERLAP_MIN,
   analyzeGaps,
@@ -29,6 +29,7 @@ import {
   recommendBuys,
   saveQuiver,
   toggleId,
+  upsertNamedSetup,
   type ConvertBuyItem,
 } from "../lib/quiver";
 import { BrandMark } from "./BrandMark";
@@ -40,7 +41,9 @@ type Props = {
 export function QuiverView({ onAdopt }: Props) {
   const [doc, setDoc] = useState<QuiverDoc>(() => loadQuiver());
   const [draft, setDraft] = useState<Omit<NamedSetup, "id">>(() => emptyDraft("axis"));
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [convertOff, setConvertOff] = useState<Set<string>>(() => new Set());
+  const draftRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     saveQuiver(doc);
@@ -80,7 +83,27 @@ export function QuiverView({ onAdopt }: Props) {
     }));
   }
 
-  function addSetup() {
+  function startEdit(s: NamedSetup) {
+    setEditingId(s.id);
+    setDraft({
+      label: s.label,
+      brand: s.brand,
+      mastId: s.mastId,
+      fuseId: s.fuseId,
+      frontId: s.frontId,
+      tailId: s.tailId,
+    });
+    requestAnimationFrame(() => {
+      draftRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(emptyDraft("axis"));
+  }
+
+  function commitSetup() {
     const mast = catalog.masts.find((m) => m.id === draft.mastId);
     const fuse = catalog.fuselages.find((f) => f.id === draft.fuseId);
     const front = catalog.fronts.find((f) => f.id === draft.frontId);
@@ -94,28 +117,16 @@ export function QuiverView({ onAdopt }: Props) {
     ) {
       return;
     }
-    const setup = newNamedSetup({
+    const payload = {
       ...draft,
       label: draft.label.trim() || `${front.familyOfficial} ${front.sizeLabel}`,
-    });
-    patch((d) => ({
-      ...d,
-      setups: [...d.setups, setup],
-      parts: {
-        mastIds: d.parts.mastIds.includes(setup.mastId)
-          ? d.parts.mastIds
-          : [...d.parts.mastIds, setup.mastId],
-        fuseIds: d.parts.fuseIds.includes(setup.fuseId)
-          ? d.parts.fuseIds
-          : [...d.parts.fuseIds, setup.fuseId],
-        frontIds: d.parts.frontIds.includes(setup.frontId)
-          ? d.parts.frontIds
-          : [...d.parts.frontIds, setup.frontId],
-        tailIds: d.parts.tailIds.includes(setup.tailId)
-          ? d.parts.tailIds
-          : [...d.parts.tailIds, setup.tailId],
-      },
-    }));
+    };
+    const setup = editingId ? { ...payload, id: editingId } : newNamedSetup(payload);
+    patch((d) => upsertNamedSetup(d, setup));
+    if (editingId) {
+      setEditingId(null);
+      setDraft(emptyDraft(payload.brand));
+    }
   }
 
   return (
@@ -135,6 +146,7 @@ export function QuiverView({ onAdopt }: Props) {
             Nothing is uploaded. Schema version 1, <code>owner: null</code> reserved for a
             future login.
           </p>
+          <p className="note picker-hint">Tap a part to add to your quiver. Tap again to remove it.</p>
 
           <PartPicker
             title="Front wings"
@@ -165,7 +177,10 @@ export function QuiverView({ onAdopt }: Props) {
           {doc.setups.length === 0 && <p className="note">No named setups yet.</p>}
           <ul className="setup-list">
             {doc.setups.map((s) => (
-              <li key={s.id} className="setup-row">
+              <li
+                key={s.id}
+                className={`setup-row${editingId === s.id ? " editing" : ""}`}
+              >
                 <BrandMark brand={s.brand} size="sm" />
                 <div>
                   <strong>{s.label}</strong>
@@ -178,35 +193,54 @@ export function QuiverView({ onAdopt }: Props) {
                     {catalog.tails.find((t) => t.id === s.tailId)?.sizeLabel}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="chip on"
-                  onClick={() =>
-                    onAdopt({
-                      brand: s.brand,
-                      frontId: s.frontId,
-                      fuseId: s.fuseId,
-                      tailId: s.tailId,
-                    })
-                  }
-                >
-                  Load in Twin
-                </button>
-                <button
-                  type="button"
-                  className="chip"
-                  onClick={() =>
-                    patch((d) => ({ ...d, setups: d.setups.filter((x) => x.id !== s.id) }))
-                  }
-                >
-                  Remove
-                </button>
+                <div className="setup-actions">
+                  <button
+                    type="button"
+                    className={`chip${editingId === s.id ? " on" : ""}`}
+                    onClick={() => startEdit(s)}
+                    aria-pressed={editingId === s.id}
+                  >
+                    {editingId === s.id ? "Editing" : "Edit"}
+                  </button>
+                  <button
+                    type="button"
+                    className="chip on"
+                    onClick={() =>
+                      onAdopt({
+                        brand: s.brand,
+                        frontId: s.frontId,
+                        fuseId: s.fuseId,
+                        tailId: s.tailId,
+                      })
+                    }
+                  >
+                    Load in Twin
+                  </button>
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() => {
+                      if (editingId === s.id) cancelEdit();
+                      patch((d) => ({ ...d, setups: d.setups.filter((x) => x.id !== s.id) }));
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
 
-          <h3 className="quiver-h">Add a setup</h3>
-          <SetupDraft draft={draft} onChange={setDraft} onAdd={addSetup} />
+          <h3 className="quiver-h">{editingId ? "Edit setup" : "Add a setup"}</h3>
+          <div ref={draftRef}>
+            <SetupDraft
+              draft={draft}
+              onChange={setDraft}
+              onSave={commitSetup}
+              onCancel={editingId ? cancelEdit : undefined}
+              editing={!!editingId}
+            />
+          </div>
 
           <h3 className="quiver-h">Disciplines</h3>
           <div className="chips">
@@ -279,9 +313,6 @@ export function QuiverView({ onAdopt }: Props) {
                       <li key={m}>{m}</li>
                     ))}
                   </ul>
-                )}
-                {g.have.length > 0 && (
-                  <p className="note">{g.have.join(" · ")}</p>
                 )}
               </div>
             ))}
@@ -595,11 +626,15 @@ function emptyDraft(brand: Brand): Omit<NamedSetup, "id"> {
 function SetupDraft({
   draft,
   onChange,
-  onAdd,
+  onSave,
+  onCancel,
+  editing,
 }: {
   draft: Omit<NamedSetup, "id">;
   onChange: (d: Omit<NamedSetup, "id">) => void;
-  onAdd: () => void;
+  onSave: () => void;
+  onCancel?: () => void;
+  editing?: boolean;
 }) {
   const masts = catalog.masts.filter((m) => m.brand === draft.brand);
   const fuses = catalog.fuselages.filter((f) => f.brand === draft.brand);
@@ -607,29 +642,31 @@ function SetupDraft({
   const tails = catalog.tails.filter((t) => t.brand === draft.brand);
 
   function setBrand(brand: Brand) {
-    onChange(emptyDraft(brand));
+    onChange({ ...emptyDraft(brand), label: draft.label });
   }
 
   return (
     <div className="setup-draft">
-      <div className="brand-toggle">
+      <div className="brand-toggle logos-only">
         <button
           type="button"
           className={draft.brand === "axis" ? "on-axis" : ""}
           onClick={() => setBrand("axis")}
+          aria-label="Axis"
+          aria-pressed={draft.brand === "axis"}
+          title="Axis"
         >
-          <span className="v v-logo">
-            <BrandMark brand="axis" size="sm" /> Axis
-          </span>
+          <BrandMark brand="axis" size="md" />
         </button>
         <button
           type="button"
           className={draft.brand === "armstrong" ? "on-arm" : ""}
           onClick={() => setBrand("armstrong")}
+          aria-label="Armstrong"
+          aria-pressed={draft.brand === "armstrong"}
+          title="Armstrong"
         >
-          <span className="v v-logo">
-            <BrandMark brand="armstrong" size="sm" /> Armstrong
-          </span>
+          <BrandMark brand="armstrong" size="md" />
         </button>
       </div>
       <div className="field">
@@ -694,10 +731,59 @@ function SetupDraft({
           ))}
         </select>
       </div>
-      <button type="button" className="chip on arm" onClick={onAdd}>
-        Save setup into quiver
-      </button>
+      <div className="setup-draft-actions">
+        <button type="button" className="chip on arm" onClick={onSave}>
+          {editing ? "Save changes" : "Save setup into quiver"}
+        </button>
+        {editing && onCancel && (
+          <button type="button" className="chip" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function pickerSummary(title: string, count: number) {
+  return (
+    <summary>
+      {title}{" "}
+      <span className="sub">
+        {count} in quiver · tap to add
+      </span>
+    </summary>
+  );
+}
+
+function PartChip({
+  id,
+  label,
+  selected,
+  onToggle,
+  title,
+}: {
+  id: string;
+  label: string;
+  selected: string[];
+  onToggle: (id: string) => void;
+  title?: string;
+}) {
+  const on = selected.includes(id);
+  return (
+    <button
+      type="button"
+      className={`chip part-chip${on ? " on" : ""}`}
+      onClick={() => onToggle(id)}
+      title={title}
+      aria-pressed={on}
+      aria-label={on ? `${label}, in quiver. Tap to remove` : `${label}, tap to add to quiver`}
+    >
+      <span className="chip-mark" aria-hidden="true">
+        {on ? "✓" : "+"}
+      </span>
+      {label}
+    </button>
   );
 }
 
@@ -721,9 +807,7 @@ function PartPicker({
     );
     return (
       <details className="picker" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary>
-          {title} <span className="sub">{selected.length} owned</span>
-        </summary>
+        {pickerSummary(title, selected.length)}
         <BrandMini brand={brand} onBrand={setBrand} />
         {families.map((fid) => (
           <div key={fid} className="picker-fam">
@@ -734,15 +818,14 @@ function PartPicker({
               {catalog.fronts
                 .filter((f) => f.familyId === fid && f.brand === brand)
                 .map((f) => (
-                  <button
+                  <PartChip
                     key={f.id}
-                    type="button"
-                    className={`chip${selected.includes(f.id) ? " on" : ""}`}
-                    onClick={() => onToggle(f.id)}
-                  >
-                    {f.sizeLabel}
-                    {f.area_cm2 != null ? ` · ${n(f.area_cm2, 0)}` : ""}
-                  </button>
+                    id={f.id}
+                    label={f.sizeLabel}
+                    selected={selected}
+                    onToggle={onToggle}
+                    title={f.area_cm2 != null ? `${f.area_cm2} cm² published area` : undefined}
+                  />
                 ))}
             </div>
           </div>
@@ -757,9 +840,7 @@ function PartPicker({
     );
     return (
       <details className="picker">
-        <summary>
-          {title} <span className="sub">{selected.length} owned</span>
-        </summary>
+        {pickerSummary(title, selected.length)}
         <BrandMini brand={brand} onBrand={setBrand} />
         {families.map((fid) => {
           const sample = catalog.tails.find((t) => t.familyId === fid);
@@ -772,14 +853,13 @@ function PartPicker({
                 {catalog.tails
                   .filter((t) => t.familyId === fid && t.brand === brand)
                   .map((t) => (
-                    <button
+                    <PartChip
                       key={t.id}
-                      type="button"
-                      className={`chip${selected.includes(t.id) ? " on" : ""}`}
-                      onClick={() => onToggle(t.id)}
-                    >
-                      {t.sizeLabel}
-                    </button>
+                      id={t.id}
+                      label={t.sizeLabel}
+                      selected={selected}
+                      onToggle={onToggle}
+                    />
                   ))}
               </div>
             </div>
@@ -792,23 +872,20 @@ function PartPicker({
   if (kind === "fuse") {
     return (
       <details className="picker">
-        <summary>
-          {title} <span className="sub">{selected.length} owned</span>
-        </summary>
+        {pickerSummary(title, selected.length)}
         <BrandMini brand={brand} onBrand={setBrand} />
         <div className="chips">
           {catalog.fuselages
             .filter((f) => f.brand === brand)
             .map((f) => (
-              <button
+              <PartChip
                 key={f.id}
-                type="button"
-                className={`chip${selected.includes(f.id) ? " on" : ""}`}
-                onClick={() => onToggle(f.id)}
-              >
-                {f.sizeLabel}
-                {f.fuse_length_mm != null ? ` · ${f.fuse_length_mm} mm` : ""}
-              </button>
+                id={f.id}
+                label={f.sizeLabel}
+                selected={selected}
+                onToggle={onToggle}
+                title={f.fuse_length_mm != null ? `${f.fuse_length_mm} mm` : undefined}
+              />
             ))}
         </div>
       </details>
@@ -820,9 +897,7 @@ function PartPicker({
   );
   return (
     <details className="picker">
-      <summary>
-        {title} <span className="sub">{selected.length} owned</span>
-      </summary>
+      {pickerSummary(title, selected.length)}
       <BrandMini brand={brand} onBrand={setBrand} />
       {families.map((fid) => (
         <div key={fid} className="picker-fam">
@@ -833,15 +908,13 @@ function PartPicker({
             {catalog.masts
               .filter((m) => m.familyId === fid && m.brand === brand)
               .map((m) => (
-                <button
+                <PartChip
                   key={m.id}
-                  type="button"
-                  className={`chip${selected.includes(m.id) ? " on" : ""}`}
-                  onClick={() => onToggle(m.id)}
-                >
-                  {m.sizeLabel}
-                  {m.length_mm != null ? ` · ${m.length_mm} mm` : ""}
-                </button>
+                  id={m.id}
+                  label={m.sizeLabel}
+                  selected={selected}
+                  onToggle={onToggle}
+                />
               ))}
           </div>
         </div>
@@ -855,17 +928,23 @@ function BrandMini({ brand, onBrand }: { brand: Brand; onBrand: (b: Brand) => vo
     <div className="chips" style={{ margin: "8px 0" }}>
       <button
         type="button"
-        className={`chip${brand === "axis" ? " on" : ""}`}
+        className={`chip logo-chip${brand === "axis" ? " on" : ""}`}
         onClick={() => onBrand("axis")}
+        aria-label="Axis"
+        aria-pressed={brand === "axis"}
+        title="Axis"
       >
-        <BrandMark brand="axis" size="sm" /> Axis
+        <BrandMark brand="axis" size="sm" />
       </button>
       <button
         type="button"
-        className={`chip${brand === "armstrong" ? " on arm" : ""}`}
+        className={`chip logo-chip${brand === "armstrong" ? " on arm" : ""}`}
         onClick={() => onBrand("armstrong")}
+        aria-label="Armstrong"
+        aria-pressed={brand === "armstrong"}
+        title="Armstrong"
       >
-        <BrandMark brand="armstrong" size="sm" /> Armstrong
+        <BrandMark brand="armstrong" size="sm" />
       </button>
     </div>
   );
