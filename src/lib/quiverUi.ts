@@ -1,4 +1,5 @@
 import { QUIVER_UI_STORAGE_KEY } from "../data/labels";
+import type { CurrencyCode } from "../data/prices";
 
 export type QuiverUiPrefs = {
   version: 1;
@@ -7,24 +8,31 @@ export type QuiverUiPrefs = {
     nextToBuy: boolean;
     brandConvert: boolean;
   };
+  currency: CurrencyCode;
 };
 
 export const DEFAULT_QUIVER_UI: QuiverUiPrefs = {
   version: 1,
   sections: { gaps: true, nextToBuy: true, brandConvert: false },
+  currency: "USD",
 };
 
 function cloneDefault(): QuiverUiPrefs {
   return {
     version: 1,
     sections: { ...DEFAULT_QUIVER_UI.sections },
+    currency: DEFAULT_QUIVER_UI.currency,
   };
+}
+
+function parseCurrency(raw: unknown): CurrencyCode {
+  return raw === "CAD" ? "CAD" : "USD";
 }
 
 /** Parse a stored prefs blob. Unknown / wrong version → defaults. */
 export function parseQuiverUi(raw: unknown): QuiverUiPrefs {
   if (!raw || typeof raw !== "object") return cloneDefault();
-  const v = raw as { version?: unknown; sections?: unknown };
+  const v = raw as { version?: unknown; sections?: unknown; currency?: unknown };
   if (v.version !== 1 || !v.sections || typeof v.sections !== "object") {
     return cloneDefault();
   }
@@ -40,6 +48,7 @@ export function parseQuiverUi(raw: unknown): QuiverUiPrefs {
           ? s.brandConvert
           : DEFAULT_QUIVER_UI.sections.brandConvert,
     },
+    currency: parseCurrency(v.currency),
   };
 }
 
@@ -61,6 +70,7 @@ export function saveQuiverUi(prefs: QuiverUiPrefs) {
       nextToBuy: !!prefs.sections.nextToBuy,
       brandConvert: !!prefs.sections.brandConvert,
     },
+    currency: parseCurrency(prefs.currency),
   };
   try {
     localStorage.setItem(QUIVER_UI_STORAGE_KEY, JSON.stringify(next));

@@ -17,7 +17,8 @@ import type {
   RiderLevel,
   Setup,
 } from "../data/types";
-import { brandName, otherBrand } from "../lib/format";
+import { FX_DATE, FX_USD_TO_CAD, PRICE_RETRIEVED, priceForCurrency, type CurrencyCode } from "../data/prices";
+import { brandName, formatMoney, otherBrand } from "../lib/format";
 import {
   analyzeGaps,
   brandConvert,
@@ -59,6 +60,19 @@ export function QuiverView({ onAdopt }: Props) {
       const next: QuiverUiPrefs = {
         version: 1,
         sections: { ...prev.sections, [key]: !prev.sections[key] },
+        currency: prev.currency,
+      };
+      saveQuiverUi(next);
+      return next;
+    });
+  }
+
+  function setCurrency(currency: CurrencyCode) {
+    setUi((prev) => {
+      const next: QuiverUiPrefs = {
+        version: 1,
+        sections: { ...prev.sections },
+        currency,
       };
       saveQuiverUi(next);
       return next;
@@ -422,6 +436,27 @@ export function QuiverView({ onAdopt }: Props) {
                   })}
                 </div>
               )}
+              <div className="currency-row" role="group" aria-label="Currency">
+                <span className="currency-label">Prices</span>
+                <div className="currency-seg">
+                  <button
+                    type="button"
+                    className={ui.currency === "USD" ? "on" : ""}
+                    aria-pressed={ui.currency === "USD"}
+                    onClick={() => setCurrency("USD")}
+                  >
+                    USD
+                  </button>
+                  <button
+                    type="button"
+                    className={ui.currency === "CAD" ? "on" : ""}
+                    aria-pressed={ui.currency === "CAD"}
+                    onClick={() => setCurrency("CAD")}
+                  >
+                    CAD
+                  </button>
+                </div>
+              </div>
               <p className="convert-headline">{convert.headline}.</p>
               <div className="pills">
                 <span className="pill">
@@ -463,11 +498,18 @@ export function QuiverView({ onAdopt }: Props) {
                   {tier.items.length === 0 ? (
                     <p className="note">No other-brand buys in this kit.</p>
                   ) : (
-                    <div className="buy-list">
-                      {tier.items.map((item) => (
-                        <ConvertBuyCard key={`${tier.pct}-${item.kind}-${item.twinId}`} item={item} />
-                      ))}
-                    </div>
+                    <>
+                      <div className="buy-list">
+                        {tier.items.map((item) => (
+                          <ConvertBuyCard
+                            key={`${tier.pct}-${item.kind}-${item.twinId}`}
+                            item={item}
+                            currency={ui.currency}
+                          />
+                        ))}
+                      </div>
+                      <KitTotal items={tier.items} currency={ui.currency} />
+                    </>
                   )}
                 </div>
               ))}
@@ -487,9 +529,14 @@ export function QuiverView({ onAdopt }: Props) {
                     <h3 className="quiver-h">All unique matches</h3>
                     <div className="buy-list">
                       {convert.buyList.map((item) => (
-                        <ConvertBuyCard key={`all-${item.kind}-${item.twinId}`} item={item} />
+                        <ConvertBuyCard
+                          key={`all-${item.kind}-${item.twinId}`}
+                          item={item}
+                          currency={ui.currency}
+                        />
                       ))}
                     </div>
+                    <KitTotal items={convert.buyList} currency={ui.currency} label="List total" />
                   </>
                 )}
               {convert.buyList.length === 0 &&
@@ -534,6 +581,10 @@ export function QuiverView({ onAdopt }: Props) {
                   ))}
                 </div>
               )}
+              <p className="price-footnote">
+                Manufacturer list prices as of {PRICE_RETRIEVED} (not live cart quotes). CAD est. from
+                USD @ {FX_USD_TO_CAD} ({FX_DATE}, Bank of Canada).
+              </p>
             </>
           )}
         </CollapsiblePanel>
@@ -585,9 +636,16 @@ function CollapsiblePanel({
   );
 }
 
-function ConvertBuyCard({ item }: { item: ConvertBuyItem }) {
+function ConvertBuyCard({
+  item,
+  currency,
+}: {
+  item: ConvertBuyItem;
+  currency: CurrencyCode;
+}) {
   const completeness = Boolean(item.kitOnly) && item.covers.length === 0;
   const noCovers = item.covers.length === 0;
+  const price = priceForCurrency(item.twinId, currency);
   return (
     <div
       className={`buy-item${item.covers.length > 1 ? " overlap" : ""}${completeness ? " kit" : ""}`}
@@ -596,6 +654,9 @@ function ConvertBuyCard({ item }: { item: ConvertBuyItem }) {
         <strong>
           <span className="kind-tag">{item.kind}</span> {item.twinTitle}
         </strong>
+        <span className="buy-price">{formatMoney(price, currency)}</span>
+      </div>
+      <div className="twin-tags">
         {completeness ? (
           <span className="kit-tag">complete setup</span>
         ) : noCovers ? (
@@ -616,6 +677,30 @@ function ConvertBuyCard({ item }: { item: ConvertBuyItem }) {
           {item.note && <p className="note convert-buy-note">{item.note}</p>}
         </>
       )}
+    </div>
+  );
+}
+
+function KitTotal({
+  items,
+  currency,
+  label = "Kit total",
+}: {
+  items: ConvertBuyItem[];
+  currency: CurrencyCode;
+  label?: string;
+}) {
+  const amounts = items.map((i) => priceForCurrency(i.twinId, currency));
+  const priced = amounts.filter((a): a is number => a != null && Number.isFinite(a));
+  const missing = amounts.length - priced.length;
+  const total = priced.reduce((s, a) => s + a, 0);
+  if (items.length === 0) return null;
+  return (
+    <div className="kit-total">
+      <strong>
+        {label}: {priced.length ? formatMoney(total, currency) : "—"}
+      </strong>
+      {missing > 0 && <span className="note"> · some parts unpriced</span>}
     </div>
   );
 }

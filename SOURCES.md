@@ -116,3 +116,33 @@ Retrieval date **2026-09-04**. Current collection (6 products): https://armstron
 | Foil Drive E-Foil Integrated | https://armstrongfoils.com/products/armstrong-foil-drive-e-foil-integrated-carbon-mast | Length **795 mm**, pod height **650 mm**. Weight null |
 
 Older A+ carbon (45–100 cm) and Performance Carbon Mk I sizes appear in leftover Shopify atom feeds; they are **not** on the current 6-product masts collection and were not added.
+
+
+## Pricing (USD list + CAD via FX)
+
+Retrieved **2026-09-07**. USD list prices from official manufacturer Shopify product / collection JSON only. CAD is **not** listed on Axis/Armstrong .com shops; UI CAD = USD × Bank of Canada FXUSDCAD daily average **1.3840** dated **2026-09-04** (https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=5). Labeled in-app as CAD est. from USD @ rate (date). Never invent round CAD list prices.
+
+Data lives in `src/data/prices.ts` (`PART_PRICES_USD` + FX constants). Absent map entries are unpriced (`null`).
+
+### Axis (https://axisfoils.com) — USD
+
+| Family / kind | Product / collection sources used |
+| --- | --- |
+| Surge fronts | `/products/axis-surge-*-carbon-hydrofoil-wing` (+ `/collections/surge/products.json`) |
+| ART v2 fronts | `/products/art-v2-1099`, `artv2-999`, `artv2-939`, `artv2-879`, `art-v2-819` |
+| Spitfire fronts | `/products/spitfire-*` |
+| Fireball fronts | `/products/axis-fireball-*-ultra-high-mod-carbon-hydrofoil-wing` (1250 uses the published copy-of handle with SKU AXFIREBALL1250) |
+| Surf Skinny / Skinny / Progressive tails | matching `/products/*skinny*` and `*-progressive-carbon-rear-wing` pages |
+| Black Advance+ fuses | `/products/black-*-advance-fuselage` (short/ultrashort/crazyshort/sillyshort) |
+| 19mm Al / Power Carbon / PC HM / Fatty / PRO UHM / Kaiwi / Foil Drive masts | matching `/products/*mast*` pages; Foil Drive uses mast-only (no cover) variant prices |
+
+### Armstrong (https://armstrongfoils.com) — USD
+
+| Family / kind | Product sources used |
+| --- | --- |
+| UHA / HA / MA Mk II fronts | `/products/uha-front-foil`, `ha-front-foil`, `ma-mk-ii-front-foil` (variant prices) |
+| Speed / Dart / Surf Mk II tails | `/products/speed-180`, `dart-140`, `dart-120-stabilizer`, `surf-mk-ii-stabilizer` |
+| Titanium Core A+ fuses | `/products/titanium-carbon-fuselage` (50/60 cm variants) |
+| Alloy / Mk II Carbon / Performance Mk II / Performance X / Foil Drive masts | `/products/alloy-mast`, `mk-ii-carbon-mast`, `performance-mk-ii-carbon-mast`, `performance-x-carbon-mast`, assist + e-foil integrated mast products |
+
+Shopify collection JSON (`/collections/<handle>/products.json`) and product JSON (`/products/<handle>.js`) were the primary scrape paths; prices are manufacturer USD as published on those official stores.

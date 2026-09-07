@@ -122,3 +122,10 @@ export function mastDeltaWords(from: number | null, to: number | null): string |
   if (d > -120) return "a bit shorter";
   return "noticeably shorter mast";
 }
+
+export function formatMoney(amount: number | null | undefined, currency: "USD" | "CAD"): string {
+  if (amount == null || !Number.isFinite(amount)) return "—";
+  const rounded = Math.round(amount);
+  const withCommas = rounded.toLocaleString("en-US");
+  return `$${withCommas} ${currency}`;
+}

@@ -24,6 +24,12 @@ import {
   upsertNamedSetup,
 } from "./quiver";
 import { DEFAULT_QUIVER_UI, parseQuiverUi } from "./quiverUi";
+import {
+  FX_USD_TO_CAD,
+  PART_PRICES_USD,
+  getPartPrice,
+  usdToCad,
+} from "../data/prices";
 
 function quiverDoc(partial: Partial<QuiverDoc> & { parts: QuiverDoc["parts"] }): QuiverDoc {
   return {
@@ -748,35 +754,72 @@ if (
   uiDefault.version !== 1 ||
   uiDefault.sections.gaps !== true ||
   uiDefault.sections.nextToBuy !== true ||
-  uiDefault.sections.brandConvert !== false
+  uiDefault.sections.brandConvert !== false ||
+  uiDefault.currency !== "USD"
 ) {
   throw new Error(`UI prefs defaults wrong: ${JSON.stringify(uiDefault)}`);
 }
 if (
   DEFAULT_QUIVER_UI.sections.gaps !== true ||
   DEFAULT_QUIVER_UI.sections.nextToBuy !== true ||
-  DEFAULT_QUIVER_UI.sections.brandConvert !== false
+  DEFAULT_QUIVER_UI.sections.brandConvert !== false ||
+  DEFAULT_QUIVER_UI.currency !== "USD"
 ) {
-  throw new Error("DEFAULT_QUIVER_UI sections must be gaps/nextToBuy open, brandConvert closed");
+  throw new Error("DEFAULT_QUIVER_UI sections must be gaps/nextToBuy open, brandConvert closed; currency USD");
 }
 const uiOn = parseQuiverUi({
   version: 1,
   sections: { gaps: false, nextToBuy: true, brandConvert: true },
+  currency: "CAD",
 });
-if (uiOn.sections.gaps !== false || uiOn.sections.brandConvert !== true) {
-  throw new Error("parseQuiverUi should honor boolean section flags");
+if (uiOn.sections.gaps !== false || uiOn.sections.brandConvert !== true || uiOn.currency !== "CAD") {
+  throw new Error("parseQuiverUi should honor boolean section flags and currency");
+}
+const uiLegacy = parseQuiverUi({
+  version: 1,
+  sections: { gaps: true, nextToBuy: true, brandConvert: false },
+});
+if (uiLegacy.currency !== "USD") {
+  throw new Error("prefs without currency must default to USD");
 }
 const uiJunk = parseQuiverUi({ version: 1, owner: null, parts: { frontIds: [] } });
 if (
   uiJunk.sections.gaps !== true ||
   uiJunk.sections.nextToBuy !== true ||
-  uiJunk.sections.brandConvert !== false
+  uiJunk.sections.brandConvert !== false ||
+  uiJunk.currency !== "USD"
 ) {
   throw new Error("inventory-shaped blobs must not parse as UI prefs");
 }
 console.log(
-  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed`,
+  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed currency=${uiDefault.currency}`,
 );
+
+section("Manufacturer prices");
+if (!(FX_USD_TO_CAD > 0) || !Number.isFinite(FX_USD_TO_CAD)) {
+  throw new Error(`bad FX_USD_TO_CAD: ${FX_USD_TO_CAD}`);
+}
+let priced = 0;
+for (const [id, row] of Object.entries(PART_PRICES_USD)) {
+  if (!(typeof row.usd === "number") || !Number.isFinite(row.usd) || row.usd < 0) {
+    throw new Error(`bad price for ${id}: ${JSON.stringify(row)}`);
+  }
+  const got = getPartPrice(id);
+  if (got.usd !== row.usd) throw new Error(`getPartPrice usd mismatch for ${id}`);
+  if (got.cad == null || got.cad < 0) throw new Error(`CAD missing/negative for ${id}`);
+  const expect = usdToCad(row.usd);
+  if (got.cad !== expect) throw new Error(`CAD FX mismatch for ${id}: ${got.cad} vs ${expect}`);
+  priced += 1;
+}
+const allIds = [
+  ...catalog.fronts.map((p) => p.id),
+  ...catalog.tails.map((p) => p.id),
+  ...catalog.fuselages.map((p) => p.id),
+  ...catalog.masts.map((p) => p.id),
+];
+const unpriced = allIds.filter((id) => getPartPrice(id).usd == null);
+console.log(`priced USD/CAD ${priced}/${allIds.length}; unpriced ${unpriced.length}`);
+if (unpriced.length) console.log(`unpriced: ${unpriced.join(", ")}`);
 
 section("Quiver gaps list missing only");
 const covered = analyzeGaps(
