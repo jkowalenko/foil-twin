@@ -168,6 +168,17 @@ Data lives in `src/data/prices.ts` (`PART_PRICES_USD` + FX constants). Absent ma
 
 Shopify collection JSON (`/collections/<handle>/products.json`) and product JSON (`/products/<handle>.js`) were the primary scrape paths; prices are manufacturer USD as published on those official stores.
 
-### Code Foils — unpriced
+### Code Foils — Kitesource.ca dealer (fallback)
 
-https://codefoils.com does **not** sell foil parts online in USD. The shop link on product pages (`https://store.codefoils.com`) is apparel and accessories, Australia only. Every Code catalog part is stored unpriced (`null`). Axis / Armstrong USD list prices and BoC FXUSDCAD **1.3840** dated **2026-09-04** are unchanged.
+https://codefoils.com does **not** sell foil parts online in USD (`https://store.codefoils.com` is apparel AU-only). When mfr pricing is unavailable, Foil Twin uses **Kitesource.ca** dealer CAD as the price source (labeled dealer, not manufacturer).
+
+| What | URL / note |
+| --- | --- |
+| Collection | https://kitesource.ca/collections/code-foils-canada |
+| Product JSON | `https://kitesource.ca/products/<handle>.js` (Shopify variant prices in CAD cents) |
+| Retrieved | **2026-09-08** |
+| Stored | `cad` from Kitesource + `usd` = CAD ÷ BoC FXUSDCAD **1.3840** (dated **2026-09-04**); `source: "kitesource"` in `src/data/prices.ts` |
+| Coverage | S / R / X / Kanga fronts; AR + R tails; all fuselages; HM / UHM Plus / Black / Alloy / Foil Drive masts |
+| Still null | `code-race-100`, `code-race-119` (Race tails not listed on Kitesource) |
+
+Axis / Armstrong manufacturer USD list prices are unchanged (`source` defaults to mfr).

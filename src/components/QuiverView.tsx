@@ -9,7 +9,7 @@ import {
 } from "../data/catalog";
 import { DISCIPLINES, GOALS, LEVELS } from "../data/labels";
 import { BRANDS, type Brand, type Discipline, type Goal, type NamedSetup, type QuiverDoc, type RiderLevel, type Setup } from "../data/types";
-import { FX_DATE, FX_USD_TO_CAD, PRICE_RETRIEVED, priceForCurrency, type CurrencyCode } from "../data/prices";
+import { FX_DATE, FX_USD_TO_CAD, KITESOURCE_RETRIEVED, PRICE_RETRIEVED, hasKitesourcePrices, priceForCurrency, type CurrencyCode } from "../data/prices";
 import { brandMod, brandName, formatMoney, otherBrand, otherBrands } from "../lib/format";
 import {
   analyzeGaps,
@@ -663,9 +663,18 @@ export function QuiverView({ onAdopt }: Props) {
                 )}
               </CollapsiblePanel>
               <p className="price-footnote">
-                Manufacturer list prices as of {PRICE_RETRIEVED} (not live cart quotes). CAD est. from
-                USD @ {FX_USD_TO_CAD} ({FX_DATE}, Bank of Canada). Code foil parts are unpriced
-                (codefoils.com does not sell them online in USD).
+                {hasKitesourcePrices() ? (
+                  <>
+                    Manufacturer list prices as of {PRICE_RETRIEVED} (not live cart quotes). Code
+                    prices: Kitesource.ca (CAD dealer, as of {KITESOURCE_RETRIEVED}); USD via BoC FX{" "}
+                    {FX_USD_TO_CAD} ({FX_DATE}). Axis/Armstrong CAD est. from USD @ same FX.
+                  </>
+                ) : (
+                  <>
+                    Manufacturer list prices as of {PRICE_RETRIEVED} (not live cart quotes). CAD est.
+                    from USD @ {FX_USD_TO_CAD} ({FX_DATE}, Bank of Canada).
+                  </>
+                )}
               </p>
             </>
           )}

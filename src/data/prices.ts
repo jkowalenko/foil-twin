@@ -1,28 +1,40 @@
 /**
- * Manufacturer list prices (USD) for catalog parts.
- * Retrieved 2026-09-07 from official Axis / Armstrong Shopify product JSON.
- * CAD is estimated at read time via Bank of Canada FX (never invented list CAD).
+ * Part list prices for catalog parts.
+ * Axis / Armstrong: manufacturer USD list (retrieved 2026-09-07 from official Shopify product JSON).
+ * Code Foils: no mfr online USD; dealer CAD from Kitesource.ca (retrieved 2026-09-08).
+ * CAD for mfr rows is estimated at read time via Bank of Canada FX.
+ * CAD for kitesource rows is the dealer list; USD = CAD / FXUSDCAD.
  * FX: 1 USD = 1.384 CAD (BoC daily average 2026-09-04).
  * Missing / unfound SKUs are absent from the map (treated as null).
- * Code Foils does not sell foil parts online in USD (apparel AU-only on store.codefoils.com);
- * every Code catalog id is unpriced (null).
+ * Code Race tails (code-race-100, code-race-119) were not listed on Kitesource — unpriced.
  */
 
 export const PRICE_RETRIEVED = "2026-09-07";
+/** Kitesource.ca Code Foils dealer retrieval date. */
+export const KITESOURCE_RETRIEVED = "2026-09-08";
 export const FX_USD_TO_CAD = 1.384;
 export const FX_DATE = "2026-09-04";
 export const FX_SOURCE = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=5";
 export const FX_SOURCE_LABEL = "Bank of Canada FXUSDCAD daily average";
+export const KITESOURCE_COLLECTION_URL = "https://kitesource.ca/collections/code-foils-canada";
+
+export type PriceSource = "mfr" | "kitesource";
 
 export type PartPrice = {
-  /** Official manufacturer USD list price. */
+  /** USD amount shown in UI (mfr list, or CAD/FX for dealer). */
   usd: number;
-  /** Official product page used for the USD figure. */
+  /** Dealer CAD list when source is kitesource; omit for mfr (CAD derived via FX). */
+  cad?: number;
+  /** Price origin. Defaults to mfr when omitted (legacy Axis/Armstrong rows). */
+  source?: PriceSource;
+  /** Product page used for the figure. */
   sourceUrl: string;
   note?: string;
+  /** Retrieval date override (e.g. kitesource scrape day). */
+  retrieved?: string;
 };
 
-/** USD list prices keyed by catalog part id. Absent => unpriced. */
+/** List prices keyed by catalog part id. Absent => unpriced. */
 export const PART_PRICES_USD: Record<string, PartPrice> = {
   "arm-alloy-58": { usd: 109.99, sourceUrl: "https://armstrongfoils.com/products/alloy-mast", note: "variant 58cm" },
   "arm-alloy-72": { usd: 119.99, sourceUrl: "https://armstrongfoils.com/products/alloy-mast", note: "variant 72cm" },
@@ -153,7 +165,64 @@ export const PART_PRICES_USD: Record<string, PartPrice> = {
   "axis-surge-830": { usd: 685.0, sourceUrl: "https://axisfoils.com/products/axis-surge-830-carbon-hydrofoil-wing" },
   "axis-surge-890": { usd: 728.0, sourceUrl: "https://axisfoils.com/products/axis-surge-890-carbon-hydrofoil-wing" },
   "axis-surge-950": { usd: 774.0, sourceUrl: "https://axisfoils.com/products/axis-surge-950-carbon-hydrofoil-wing" },
+  "code-alloy-750": { usd: 396.68, cad: 549, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-aluminum-mast", note: "variant 75cm COMPLETE", retrieved: "2026-09-08" },
+  "code-alloy-800": { usd: 403.9, cad: 559, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-aluminum-mast", note: "variant 80cm COMPLETE", retrieved: "2026-09-08" },
+  "code-ar-142": { usd: 237.72, cad: 329, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ar-series-tail-wing-canada", note: "variant 142", retrieved: "2026-09-08" },
+  "code-ar-150": { usd: 237.72, cad: 329, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ar-series-tail-wing-canada", note: "variant 150", retrieved: "2026-09-08" },
+  "code-ar-158": { usd: 244.94, cad: 339, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ar-series-tail-wing-canada", note: "variant 158", retrieved: "2026-09-08" },
+  "code-ar-166": { usd: 244.94, cad: 339, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ar-series-tail-wing-canada", note: "variant 166", retrieved: "2026-09-08" },
+  "code-ar-175": { usd: 252.17, cad: 349, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ar-series-tail-wing-canada", note: "variant 175", retrieved: "2026-09-08" },
+  "code-ar-188": { usd: 259.39, cad: 359, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ar-series-tail-wing-canada", note: "variant 188", retrieved: "2026-09-08" },
+  "code-black-750": { usd: 1935.69, cad: 2679, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-black-series-mast", note: "variant 75cm", retrieved: "2026-09-08" },
+  "code-black-800": { usd: 1964.6, cad: 2719, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-black-series-mast", note: "variant 80cm", retrieved: "2026-09-08" },
+  "code-black-850": { usd: 2036.85, cad: 2819, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-black-series-mast", note: "variant 85cm", retrieved: "2026-09-08" },
+  "code-fd-780-11": { usd: 2065.75, cad: 2859, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-foil-drive-integrated-uhm-mast-canada", note: "variant 11cm pod", retrieved: "2026-09-08" },
+  "code-fd-780-17": { usd: 2065.75, cad: 2859, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-foil-drive-integrated-uhm-mast-canada", note: "variant 17cm pod", retrieved: "2026-09-08" },
+  "code-fuse-2xs": { usd: 230.49, cad: 319, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-fuselage-canada", note: "variant XXS", retrieved: "2026-09-08" },
+  "code-fuse-l": { usd: 244.94, cad: 339, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-fuselage-canada", note: "variant Large", retrieved: "2026-09-08" },
+  "code-fuse-m": { usd: 230.49, cad: 319, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-fuselage-canada", note: "variant Medium", retrieved: "2026-09-08" },
+  "code-fuse-s": { usd: 230.49, cad: 319, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-fuselage-canada", note: "variant Small", retrieved: "2026-09-08" },
+  "code-fuse-xs": { usd: 230.49, cad: 319, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-fuselage-canada", note: "variant Extra Small", retrieved: "2026-09-08" },
+  "code-hm-750": { usd: 960.26, cad: 1329, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-high-modulus-mast-canada", note: "variant 75cm", retrieved: "2026-09-08" },
+  "code-hm-800": { usd: 1010.84, cad: 1399, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-high-modulus-mast-canada", note: "variant 80cm", retrieved: "2026-09-08" },
+  "code-hm-850": { usd: 1061.42, cad: 1469, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-high-modulus-mast-canada", note: "variant 85cm", retrieved: "2026-09-08" },
+  "code-kanga-1390": { usd: 981.94, cad: 1359, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-kanga-series-front-wing", note: "variant 1390", retrieved: "2026-09-08" },
+  "code-kanga-1600": { usd: 1010.84, cad: 1399, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-kanga-series-front-wing", note: "variant 1600", retrieved: "2026-09-08" },
+  "code-kanga-1870": { usd: 1032.51, cad: 1429, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-kanga-series-front-wing", note: "variant 1870", retrieved: "2026-09-08" },
+  "code-kanga-2220": { usd: 1617.77, cad: 2239, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-kanga-series-front-wing", note: "variant 2220", retrieved: "2026-09-08" },
+  "code-r-1075": { usd: 1032.51, cad: 1429, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-hm-front-wing-canada", note: "variant 1075", retrieved: "2026-09-08" },
+  "code-r-1250": { usd: 1083.09, cad: 1499, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-hm-front-wing-canada", note: "variant 1250", retrieved: "2026-09-08" },
+  "code-r-600": { usd: 873.55, cad: 1209, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-hm-front-wing-canada", note: "variant 600", retrieved: "2026-09-08" },
+  "code-r-680": { usd: 873.55, cad: 1209, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-hm-front-wing-canada", note: "variant 680", retrieved: "2026-09-08" },
+  "code-r-770": { usd: 880.78, cad: 1219, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-hm-front-wing-canada", note: "variant 770", retrieved: "2026-09-08" },
+  "code-r-860": { usd: 931.36, cad: 1289, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-hm-front-wing-canada", note: "variant 860", retrieved: "2026-09-08" },
+  "code-r-960": { usd: 981.94, cad: 1359, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-hm-front-wing-canada", note: "variant 960", retrieved: "2026-09-08" },
+  "code-rtail-110": { usd: 252.17, cad: 349, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-tail-wing-canada", note: "variant 110", retrieved: "2026-09-08" },
+  "code-rtail-120": { usd: 252.17, cad: 349, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-tail-wing-canada", note: "variant 120", retrieved: "2026-09-08" },
+  "code-rtail-135": { usd: 252.17, cad: 349, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-tail-wing-canada", note: "variant 135", retrieved: "2026-09-08" },
+  "code-rtail-151": { usd: 259.39, cad: 359, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-r-series-tail-wing-canada", note: "variant 151", retrieved: "2026-09-08" },
+  "code-s-1130": { usd: 880.78, cad: 1219, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 1130", retrieved: "2026-09-08" },
+  "code-s-1300": { usd: 953.03, cad: 1319, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 1300", retrieved: "2026-09-08" },
+  "code-s-1540": { usd: 960.26, cad: 1329, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 1540", retrieved: "2026-09-08" },
+  "code-s-1725": { usd: 981.94, cad: 1359, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 1725", retrieved: "2026-09-08" },
+  "code-s-500": { usd: 779.62, cad: 1079, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 500", retrieved: "2026-09-08" },
+  "code-s-615": { usd: 794.08, cad: 1099, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 615", retrieved: "2026-09-08" },
+  "code-s-720": { usd: 794.08, cad: 1099, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 720", retrieved: "2026-09-08" },
+  "code-s-850": { usd: 794.08, cad: 1099, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 850", retrieved: "2026-09-08" },
+  "code-s-980": { usd: 815.75, cad: 1129, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-s-series-front-wing-canada", note: "variant 980", retrieved: "2026-09-08" },
+  "code-uhm-plus-750": { usd: 1364.88, cad: 1889, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ultra-high-modulus-mast-canada", note: "variant 75cm", retrieved: "2026-09-08" },
+  "code-uhm-plus-800": { usd: 1437.14, cad: 1989, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ultra-high-modulus-mast-canada", note: "variant 80cm", retrieved: "2026-09-08" },
+  "code-uhm-plus-850": { usd: 1509.39, cad: 2089, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ultra-high-modulus-mast-canada", note: "variant 85cm", retrieved: "2026-09-08" },
+  "code-uhm-plus-950": { usd: 1733.38, cad: 2399, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-ultra-high-modulus-mast-canada", note: "variant 95cm", retrieved: "2026-09-08" },
+  "code-x-1085": { usd: 1032.51, cad: 1429, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-x-series-hm-front-wing-canada", note: "variant 1085", retrieved: "2026-09-08" },
+  "code-x-1195": { usd: 1083.09, cad: 1499, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-x-series-hm-front-wing-canada", note: "variant 1195", retrieved: "2026-09-08" },
+  "code-x-700": { usd: 859.1, cad: 1189, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-x-series-hm-front-wing-canada", note: "variant 700", retrieved: "2026-09-08" },
+  "code-x-740": { usd: 859.1, cad: 1189, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-x-series-hm-front-wing-canada", note: "variant 740", retrieved: "2026-09-08" },
+  "code-x-810": { usd: 880.78, cad: 1219, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-x-series-hm-front-wing-canada", note: "variant 810", retrieved: "2026-09-08" },
+  "code-x-890": { usd: 938.58, cad: 1299, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-x-series-hm-front-wing-canada", note: "variant 890", retrieved: "2026-09-08" },
+  "code-x-985": { usd: 989.16, cad: 1369, source: "kitesource", sourceUrl: "https://kitesource.ca/products/code-foils-x-series-hm-front-wing-canada", note: "variant 985", retrieved: "2026-09-08" },
 };
+
 
 export type CurrencyCode = "USD" | "CAD";
 
@@ -161,16 +230,39 @@ export function usdToCad(usd: number): number {
   return Math.round(usd * FX_USD_TO_CAD * 100) / 100;
 }
 
-export function getPartPrice(partId: string): { usd: number | null; cad: number | null } {
+export function cadToUsd(cad: number): number {
+  return Math.round((cad / FX_USD_TO_CAD) * 100) / 100;
+}
+
+export function priceSourceOf(row: PartPrice): PriceSource {
+  return row.source ?? "mfr";
+}
+
+export function hasKitesourcePrices(): boolean {
+  return Object.values(PART_PRICES_USD).some((r) => priceSourceOf(r) === "kitesource");
+}
+
+export function getPartPrice(partId: string): {
+  usd: number | null;
+  cad: number | null;
+  source: PriceSource | null;
+} {
   const row = PART_PRICES_USD[partId];
   if (!row || !(row.usd >= 0) || !Number.isFinite(row.usd)) {
-    return { usd: null, cad: null };
+    return { usd: null, cad: null, source: null };
   }
-  return { usd: row.usd, cad: usdToCad(row.usd) };
+  const source = priceSourceOf(row);
+  if (source === "kitesource") {
+    const cad = row.cad;
+    if (cad == null || !(cad >= 0) || !Number.isFinite(cad)) {
+      return { usd: null, cad: null, source: null };
+    }
+    return { usd: row.usd, cad, source };
+  }
+  return { usd: row.usd, cad: usdToCad(row.usd), source };
 }
 
 export function priceForCurrency(partId: string, currency: CurrencyCode): number | null {
   const p = getPartPrice(partId);
   return currency === "CAD" ? p.cad : p.usd;
 }
-

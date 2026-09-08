@@ -5,6 +5,8 @@ export const RETRIEVED = "2026-09-03";
 export const MAST_RETRIEVED = "2026-09-04";
 /** Retrieval date for the Code Foils catalog (v10). */
 export const CODE_RETRIEVED = "2026-09-08";
+/** Retrieval date for Kitesource.ca Code dealer prices. */
+export const KITESOURCE_PRICE_RETRIEVED = "2026-09-08";
 
 export function src(
   url: string,
@@ -119,4 +121,5 @@ export const URLS = {
   codeAlloyMast: "https://codefoils.com/product/aluminium-mast/",
   codeFdMast: "https://codefoils.com/product/code-foils-x-foil-drive-integrated-mast/",
   codeStore: "https://store.codefoils.com",
+  kitesourceCode: "https://kitesource.ca/collections/code-foils-canada",
 } as const;

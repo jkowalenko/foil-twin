@@ -29,7 +29,9 @@ import { MAST_FAMILY_TWIN, twinMastFamily } from "./mastFamilies";
 import {
   FX_USD_TO_CAD,
   PART_PRICES_USD,
+  cadToUsd,
   getPartPrice,
+  priceSourceOf,
   usdToCad,
 } from "../data/prices";
 
@@ -864,20 +866,41 @@ console.log(
   `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed kits open convertInclude open convertMatches collapsed currency=${uiDefault.currency}`,
 );
 
-section("Manufacturer prices");
+section("Manufacturer + dealer prices");
 if (!(FX_USD_TO_CAD > 0) || !Number.isFinite(FX_USD_TO_CAD)) {
   throw new Error(`bad FX_USD_TO_CAD: ${FX_USD_TO_CAD}`);
 }
 let priced = 0;
+let mfrN = 0;
+let kiteN = 0;
 for (const [id, row] of Object.entries(PART_PRICES_USD)) {
   if (!(typeof row.usd === "number") || !Number.isFinite(row.usd) || row.usd < 0) {
     throw new Error(`bad price for ${id}: ${JSON.stringify(row)}`);
   }
+  const source = priceSourceOf(row);
   const got = getPartPrice(id);
   if (got.usd !== row.usd) throw new Error(`getPartPrice usd mismatch for ${id}`);
   if (got.cad == null || got.cad < 0) throw new Error(`CAD missing/negative for ${id}`);
-  const expect = usdToCad(row.usd);
-  if (got.cad !== expect) throw new Error(`CAD FX mismatch for ${id}: ${got.cad} vs ${expect}`);
+  if (got.source !== source) throw new Error(`source mismatch for ${id}`);
+  if (source === "kitesource") {
+    if (row.cad == null || row.cad < 0) throw new Error(`kitesource row missing cad: ${id}`);
+    if (got.cad !== row.cad) throw new Error(`kitesource CAD mismatch for ${id}`);
+    const expectUsd = cadToUsd(row.cad);
+    if (got.usd !== expectUsd) {
+      throw new Error(`kitesource USD FX mismatch for ${id}: ${got.usd} vs ${expectUsd}`);
+    }
+    if (!id.startsWith("code-")) {
+      throw new Error(`kitesource price on non-Code id ${id}`);
+    }
+    kiteN += 1;
+  } else {
+    if (id.startsWith("code-")) {
+      throw new Error(`Code id ${id} must be kitesource, got ${source}`);
+    }
+    const expect = usdToCad(row.usd);
+    if (got.cad !== expect) throw new Error(`CAD FX mismatch for ${id}: ${got.cad} vs ${expect}`);
+    mfrN += 1;
+  }
   priced += 1;
 }
 const allIds = [
@@ -887,7 +910,9 @@ const allIds = [
   ...catalog.masts.map((p) => p.id),
 ];
 const unpriced = allIds.filter((id) => getPartPrice(id).usd == null);
-console.log(`priced USD/CAD ${priced}/${allIds.length}; unpriced ${unpriced.length}`);
+console.log(
+  `priced USD/CAD ${priced}/${allIds.length} (mfr ${mfrN}, kitesource ${kiteN}); unpriced ${unpriced.length}`,
+);
 if (unpriced.length) console.log(`unpriced: ${unpriced.join(", ")}`);
 
 section("Quiver gaps list missing only");
@@ -1054,10 +1079,31 @@ if (
 ) {
   throw new Error(`Code mast counts wrong: ${JSON.stringify(codeMastN)}`);
 }
-const codePriced = codeMust.filter((id) => getPartPrice(id).usd != null);
-if (codePriced.length) {
-  throw new Error(`Code parts must be unpriced, got USD for ${codePriced.join(", ")}`);
+const allCodeIds = [
+  ...catalog.fronts.filter((p) => p.brand === "code").map((p) => p.id),
+  ...catalog.tails.filter((p) => p.brand === "code").map((p) => p.id),
+  ...catalog.fuselages.filter((p) => p.brand === "code").map((p) => p.id),
+  ...catalog.masts.filter((p) => p.brand === "code").map((p) => p.id),
+];
+const codePriced = allCodeIds.filter((id) => getPartPrice(id).usd != null);
+const codeUnpriced = allCodeIds.filter((id) => getPartPrice(id).usd == null);
+for (const id of codePriced) {
+  const p = getPartPrice(id);
+  if (p.source !== "kitesource") {
+    throw new Error(`Code ${id} must be kitesource-sourced, got ${p.source}`);
+  }
 }
+const expectedNull = new Set(["code-race-100", "code-race-119"]);
+if (codeUnpriced.some((id) => !expectedNull.has(id))) {
+  throw new Error(`unexpected Code nulls (only Race tails expected): ${codeUnpriced.join(", ")}`);
+}
+if (codePriced.length < 50) {
+  throw new Error(`expected most Code SKUs priced; got ${codePriced.length}/${allCodeIds.length}`);
+}
+console.log(
+  `Code prices: ${codePriced.length}/${allCodeIds.length} kitesource; still null: ${codeUnpriced.join(", ") || "(none)"}`,
+);
+
 const s850 = catalog.fronts.find((f) => f.id === "code-s-850")!;
 if (s850.span_mm !== 900 || s850.area_cm2 !== 850 || s850.aspect_ratio !== 9.5) {
   throw new Error(`code-s-850 specs drifted: ${s850.span_mm}/${s850.area_cm2}/${s850.aspect_ratio}`);
