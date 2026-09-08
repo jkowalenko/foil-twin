@@ -488,41 +488,50 @@ export function QuiverView({ onAdopt }: Props) {
                 />
               </div>
               {ownedConvert.length > 0 && (
-                <div className="convert-include">
-                  <div className="convert-kind-h">Tick parts to include</div>
-                  {(["front", "tail", "fuse", "mast"] as const).map((kind) => {
-                    const items = ownedConvert.filter((p) => p.kind === kind);
-                    if (!items.length) return null;
-                    const kindLabel =
-                      kind === "front"
-                        ? "Front wings"
-                        : kind === "tail"
-                          ? "Tails"
-                          : kind === "fuse"
-                            ? "Fuselages"
-                            : "Masts";
-                    return (
-                      <div key={kind} className="convert-kind">
-                        <div className="convert-kind-h">{kindLabel}</div>
-                        <div className="convert-checks">
-                          {items.map((p) => {
-                            const on = !convertOff.has(p.id);
-                            return (
-                              <label key={p.id} className={on ? "" : "off"}>
-                                <input
-                                  type="checkbox"
-                                  checked={on}
-                                  onChange={() => toggleConvert(p.id)}
-                                />
-                                {p.title}
-                              </label>
-                            );
-                          })}
+                <CollapsiblePanel
+                  id="convertInclude"
+                  label="Parts to include"
+                  title="Parts to include"
+                  sub="Tick what counts toward the convert kits"
+                  open={ui.sections.convertInclude}
+                  onToggle={() => toggleSection("convertInclude")}
+                  nested
+                >
+                  <div className="convert-include">
+                    {(["front", "tail", "fuse", "mast"] as const).map((kind) => {
+                      const items = ownedConvert.filter((p) => p.kind === kind);
+                      if (!items.length) return null;
+                      const kindLabel =
+                        kind === "front"
+                          ? "Front wings"
+                          : kind === "tail"
+                            ? "Tails"
+                            : kind === "fuse"
+                              ? "Fuselages"
+                              : "Masts";
+                      return (
+                        <div key={kind} className="convert-kind">
+                          <div className="convert-kind-h">{kindLabel}</div>
+                          <div className="convert-checks">
+                            {items.map((p) => {
+                              const on = !convertOff.has(p.id);
+                              return (
+                                <label key={p.id} className={on ? "" : "off"}>
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => toggleConvert(p.id)}
+                                  />
+                                  {p.title}
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                </CollapsiblePanel>
               )}
               <p className="convert-headline">{convert.headline}.</p>
               <div className="pills">
@@ -545,18 +554,6 @@ export function QuiverView({ onAdopt }: Props) {
                   <span className="pill save-pill">Fewer buys than a one-for-one swap</span>
                 )}
               </div>
-              {convert.frontOverlaps.length > 0 && (
-                <div className="overlap-list">
-                  <h3>One other-brand front can stand in for several you own</h3>
-                  {convert.frontOverlaps.map((g) => (
-                    <div key={g.twinId} className="overlap-card">
-                      <strong>{g.twinTitle}</strong> can stand in for{" "}
-                      {g.owned.map((o) => o.title).join(", ")}. One buy instead of{" "}
-                      {g.owned.length}.
-                    </div>
-                  ))}
-                </div>
-              )}
               <h3 className="quiver-h">Suggested kits</h3>
               {([80, 90] as const).map((pct) => {
                 const tier = convert.coverageTiers.find((t) => t.pct === pct);
@@ -604,74 +601,45 @@ export function QuiverView({ onAdopt }: Props) {
                   </CollapsiblePanel>
                 );
               })}
-              {convert.rangeSummaries.length > 0 && (
-                <div className="convert-ranges">
-                  {convert.rangeSummaries.map((r) => (
-                    <p key={`${r.kind}-${r.familyOfficial}-${r.minId}`} className="convert-range">
-                      {r.note}
-                    </p>
-                  ))}
-                </div>
-              )}
-              {convert.buyList.length > 0 &&
-                convert.buyList.length !==
-                  (convert.coverageTiers.find((t) => t.pct === 90)?.items.length ?? 0) && (
-                  <>
-                    <h3 className="quiver-h">All unique matches</h3>
-                    <div className="buy-list">
-                      {convert.buyList.map((item) => (
-                        <ConvertBuyCard
-                          key={`all-${item.kind}-${item.twinId}`}
-                          item={item}
-                          currency={ui.currency}
-                        />
-                      ))}
-                    </div>
-                    <KitTotal items={convert.buyList} currency={ui.currency} label="List total" />
-                  </>
-                )}
               {convert.buyList.length === 0 &&
                 convert.coverageTiers.every((t) => t.items.length === 0) && (
                   <p className="empty-state">Tick owned parts to see other-brand matches.</p>
                 )}
-              {convert.tableRows.length > 0 && (
-                <table className="convert-table">
-                  <thead>
-                    <tr>
-                      <th>You own ({brandName(convert.from)})</th>
-                      <th>Closest {brandName(convert.to)}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {convert.tableRows.map((r) => (
-                      <tr key={`${r.kind}-${r.ownedId}`}>
-                        <td>
-                          <span className="kind-tag">{r.kind}</span> {r.ownedTitle}
-                        </td>
-                        <td>
-                          {r.twinTitle ?? "—"}
-                          <div className="sub">{r.why}</div>
-                        </td>
+              <CollapsiblePanel
+                id="convertMatches"
+                label="Complete product matches"
+                title="Complete product matches"
+                sub="Every ticked part → nearest other-brand twin"
+                open={ui.sections.convertMatches}
+                onToggle={() => toggleSection("convertMatches")}
+                nested
+              >
+                {convert.tableRows.length === 0 ? (
+                  <p className="empty-state">Tick owned parts to see each product match.</p>
+                ) : (
+                  <table className="convert-table">
+                    <thead>
+                      <tr>
+                        <th>You own ({brandName(convert.from)})</th>
+                        <th>Closest {brandName(convert.to)}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {convert.path.length > 0 && (
-                <div className="convert-path">
-                  <h3>If you switched brands</h3>
-                  {convert.path.map((p) => (
-                    <div key={p.headline} className="path-card">
-                      <strong>{p.headline}</strong>
-                      <ul className="why">
-                        {p.why.map((w) => (
-                          <li key={w}>{w}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    </thead>
+                    <tbody>
+                      {convert.tableRows.map((r) => (
+                        <tr key={`${r.kind}-${r.ownedId}`}>
+                          <td>
+                            <span className="kind-tag">{r.kind}</span> {r.ownedTitle}
+                          </td>
+                          <td>
+                            {r.twinTitle ?? "—"}
+                            <div className="sub">{r.why}</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CollapsiblePanel>
               <p className="price-footnote">
                 Manufacturer list prices as of {PRICE_RETRIEVED} (not live cart quotes). CAD est. from
                 USD @ {FX_USD_TO_CAD} ({FX_DATE}, Bank of Canada). Code foil parts are unpriced

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { DISCIPLINES, GOALS, LEVELS } from "../data/labels";
-import type { Discipline, Goal, RiderLevel, Setup } from "../data/types";
-import { brandName, n, otherBrand, setupLabel } from "../lib/format";
+import type { Brand, Discipline, Goal, RiderLevel, Setup } from "../data/types";
+import { brandName, n, otherBrand, otherBrands, setupLabel } from "../lib/format";
 import { resolveSetup } from "../lib/match";
 import { nextSetups } from "../lib/progression";
-import { BrandMark } from "./BrandMark";
+import { BrandMark, BrandToggle } from "./BrandMark";
 import { SetupBuilder } from "./SetupBuilder";
 import { TwinCard } from "./TwinCard";
 
@@ -31,14 +31,24 @@ export function ProgressView({
   onDiscipline,
   onGoal,
 }: Props) {
+  const twinChoices = otherBrands(setup.brand);
+  const [twinBrand, setTwinBrand] = useState<Brand>(() => otherBrand(setup.brand));
+  useEffect(() => {
+    setTwinBrand((prev) =>
+      prev === setup.brand || !otherBrands(setup.brand).includes(prev)
+        ? otherBrand(setup.brand)
+        : prev,
+    );
+  }, [setup.brand]);
+
   const recs = useMemo(
-    () => nextSetups(setup, level, discipline, goal),
-    [setup, level, discipline, goal],
+    () => nextSetups(setup, level, discipline, goal, { targetBrand: twinBrand }),
+    [setup, level, discipline, goal, twinBrand],
   );
   const [slide, setSlide] = useState(0);
   useEffect(() => {
     setSlide(0);
-  }, [setup.frontId, setup.fuseId, setup.tailId, level, discipline, goal]);
+  }, [setup.frontId, setup.fuseId, setup.tailId, level, discipline, goal, twinBrand]);
   const resolved = resolveSetup(setup);
   const active = recs[slide] ?? recs[0];
   const last = Math.max(recs.length - 1, 0);
@@ -48,7 +58,10 @@ export function ProgressView({
       <div className="panel">
         <div className="panel-h">
           <div>
-            <h2>Where you are</h2>
+            <h2 className="h-with-logo">
+              <BrandMark brand={setup.brand} size="sm" />
+              Where you are
+            </h2>
             <div className="sub">{setupLabel(setup)}</div>
           </div>
         </div>
@@ -184,15 +197,30 @@ export function ProgressView({
             >
               Load this as current setup
             </button>
-            {active.otherBrandTwin && (
-              <div style={{ marginTop: 14 }}>
-                <div className="sub h-with-logo" style={{ marginBottom: 8, color: "var(--muted)" }}>
-                  <BrandMark brand={otherBrand(setup.brand)} size="sm" />
-                  Closest {brandName(otherBrand(setup.brand))} twin of this pick
-                </div>
-                <TwinCard match={active.otherBrandTwin} />
+            <div style={{ marginTop: 14 }}>
+              <div className="sub" style={{ marginBottom: 8, color: "var(--muted)" }}>
+                Closest other-brand twin of this pick
               </div>
-            )}
+              <BrandToggle
+                value={twinBrand}
+                onChange={setTwinBrand}
+                brands={twinChoices}
+                size="sm"
+              />
+              {active.otherBrandTwin ? (
+                <div style={{ marginTop: 10 }}>
+                  <div className="sub h-with-logo" style={{ marginBottom: 8, color: "var(--muted)" }}>
+                    <BrandMark brand={twinBrand} size="sm" />
+                    {brandName(twinBrand)} twin
+                  </div>
+                  <TwinCard match={active.otherBrandTwin} />
+                </div>
+              ) : (
+                <p className="empty-state" style={{ marginTop: 10 }}>
+                  No close {brandName(twinBrand)} twin for this step.
+                </p>
+              )}
+            </div>
           </article>
         )}
       </div>

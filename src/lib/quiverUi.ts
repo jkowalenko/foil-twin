@@ -11,6 +11,10 @@ export type QuiverUiPrefs = {
     kit80: boolean;
     /** Fuller kit (90%) panel open */
     kit90: boolean;
+    /** Owned parts to include in convert — default expanded */
+    convertInclude: boolean;
+    /** Full owned→twin match table — default collapsed */
+    convertMatches: boolean;
   };
   currency: CurrencyCode;
 };
@@ -23,6 +27,8 @@ export const DEFAULT_QUIVER_UI: QuiverUiPrefs = {
     brandConvert: false,
     kit80: true,
     kit90: true,
+    convertInclude: true,
+    convertMatches: false,
   },
   currency: "USD",
 };
@@ -59,6 +65,8 @@ export function parseQuiverUi(raw: unknown): QuiverUiPrefs {
       brandConvert: parseBool(s.brandConvert, DEFAULT_QUIVER_UI.sections.brandConvert),
       kit80: parseBool(s.kit80, DEFAULT_QUIVER_UI.sections.kit80),
       kit90: parseBool(s.kit90, DEFAULT_QUIVER_UI.sections.kit90),
+      convertInclude: parseBool(s.convertInclude, DEFAULT_QUIVER_UI.sections.convertInclude),
+      convertMatches: parseBool(s.convertMatches, DEFAULT_QUIVER_UI.sections.convertMatches),
     },
     currency: parseCurrency(v.currency),
   };
@@ -83,6 +91,8 @@ export function saveQuiverUi(prefs: QuiverUiPrefs) {
       brandConvert: !!prefs.sections.brandConvert,
       kit80: !!prefs.sections.kit80,
       kit90: !!prefs.sections.kit90,
+      convertInclude: !!prefs.sections.convertInclude,
+      convertMatches: !!prefs.sections.convertMatches,
     },
     currency: parseCurrency(prefs.currency),
   };

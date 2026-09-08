@@ -1,5 +1,6 @@
 import { catalog } from "../data/catalog";
 import type {
+  Brand,
   Discipline,
   FrontWing,
   Fuselage,
@@ -738,12 +739,14 @@ export function nextSetups(
   level: RiderLevel,
   _discipline: Discipline,
   goal: Goal,
+  opts?: { targetBrand?: Brand },
 ): NextSetup[] {
   void _discipline;
   const src = resolveSetup(current);
   if (!src) return [];
 
   const picked = pickLadder(src, level, generateIdeas(src, goal));
+  const twinOpts = opts?.targetBrand ? { targetBrand: opts.targetBrand } : undefined;
 
   return picked.map((idea) => {
     const setup: Setup = {
@@ -752,7 +755,7 @@ export function nextSetups(
       fuseId: idea.fuse.id,
       tailId: idea.tail.id,
     };
-    const twin = rankTwins(setup, 1)[0] ?? null;
+    const twin = rankTwins(setup, 1, twinOpts)[0] ?? null;
     return {
       setup,
       front: idea.front,

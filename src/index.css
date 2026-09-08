@@ -346,6 +346,20 @@ input:focus-visible {
   justify-content: center;
   min-height: 52px;
   padding: 12px 10px;
+  overflow: hidden;
+}
+.brand-toggle.logos-only button .brand-mark,
+.brand-toggle.logos-only button .arm-wordmark,
+.brand-toggle.logos-only button .code-wordmark {
+  max-width: 100%;
+}
+.brand-toggle.logos-only button .brand-mark img,
+.brand-toggle.logos-only button .arm-wordmark img,
+.brand-toggle.logos-only button .code-wordmark img {
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  max-height: 22px;
 }
 .brand-toggle button .k {
   display: block;

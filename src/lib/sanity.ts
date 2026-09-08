@@ -1,6 +1,6 @@
 import { FAMILY_COLOR, FRONT_FAMILY_ORDER, catalog, fusesByBrand } from "../data/catalog";
 import { GOALS, QUIVER_STORAGE_KEY, QUIVER_UI_STORAGE_KEY } from "../data/labels";
-import type { Goal, QuiverDoc, Setup } from "../data/types";
+import { BRANDS, type Goal, type QuiverDoc, type Setup } from "../data/types";
 import { frontTitle } from "./format";
 import {
   MIN_FRONT_TWIN,
@@ -182,6 +182,35 @@ function short(f: { familyOfficial: string; sizeLabel: string }) {
 }
 
 const art879 = setup("axis-artv2-879", "axis-advplus-ultrashort", "axis-skinny-360-45");
+
+section("Progress ride brands include Code");
+if (BRANDS.length !== 3 || BRANDS[0] !== "axis" || BRANDS[1] !== "armstrong" || BRANDS[2] !== "code") {
+  throw new Error(`BRANDS must be axis/armstrong/code, got ${JSON.stringify(BRANDS)}`);
+}
+{
+  const codeFront = catalog.fronts.find((f) => f.brand === "code" && f.familyId === "code-s");
+  const codeFuse = fusesByBrand("code")[0];
+  const codeTail = catalog.tails.find((t) => t.brand === "code");
+  if (!codeFront || !codeFuse || !codeTail) throw new Error("Code catalog missing front/fuse/tail for Progress");
+  const codeSetup: Setup = {
+    brand: "code",
+    frontId: codeFront.id,
+    fuseId: codeFuse.id,
+    tailId: codeTail.id,
+  };
+  const codeRecs = nextSetups(codeSetup, "comfortable", "wing", "more-speed", { targetBrand: "axis" });
+  if (codeRecs.some((r) => r.setup.brand !== "code")) {
+    throw new Error("Code Progress must keep same-brand next steps");
+  }
+  const twinBrand = codeRecs[0]?.otherBrandTwin?.front.brand;
+  if (codeRecs[0]?.otherBrandTwin && twinBrand !== "axis") {
+    throw new Error(`Code Progress twin targetBrand=axis expected axis, got ${twinBrand}`);
+  }
+  console.log(
+    `Progress brands ${BRANDS.join("/")} · Code sample ${codeFront.id} → ${codeRecs.length} step(s)` +
+      (codeRecs[0] ? `; twin ${codeRecs[0].otherBrandTwin ? codeRecs[0].otherBrandTwin.front.id : "none"}` : ""),
+  );
+}
 
 section("Progression ladder (ART v2 879, wing, more speed)");
 const levels: RiderLevel[] = ["learning", "comfortable", "pushing"];
@@ -761,6 +790,8 @@ if (
   uiDefault.sections.brandConvert !== false ||
   uiDefault.sections.kit80 !== true ||
   uiDefault.sections.kit90 !== true ||
+  uiDefault.sections.convertInclude !== true ||
+  uiDefault.sections.convertMatches !== false ||
   uiDefault.currency !== "USD"
 ) {
   throw new Error(`UI prefs defaults wrong: ${JSON.stringify(uiDefault)}`);
@@ -771,13 +802,25 @@ if (
   DEFAULT_QUIVER_UI.sections.brandConvert !== false ||
   DEFAULT_QUIVER_UI.sections.kit80 !== true ||
   DEFAULT_QUIVER_UI.sections.kit90 !== true ||
+  DEFAULT_QUIVER_UI.sections.convertInclude !== true ||
+  DEFAULT_QUIVER_UI.sections.convertMatches !== false ||
   DEFAULT_QUIVER_UI.currency !== "USD"
 ) {
-  throw new Error("DEFAULT_QUIVER_UI: gaps/nextToBuy/kit80/kit90 open, brandConvert closed; currency USD");
+  throw new Error(
+    "DEFAULT_QUIVER_UI: gaps/nextToBuy/kit80/kit90/convertInclude open; brandConvert/convertMatches closed; currency USD",
+  );
 }
 const uiOn = parseQuiverUi({
   version: 1,
-  sections: { gaps: false, nextToBuy: true, brandConvert: true, kit80: false, kit90: true },
+  sections: {
+    gaps: false,
+    nextToBuy: true,
+    brandConvert: true,
+    kit80: false,
+    kit90: true,
+    convertInclude: false,
+    convertMatches: true,
+  },
   currency: "CAD",
 });
 if (
@@ -785,6 +828,8 @@ if (
   uiOn.sections.brandConvert !== true ||
   uiOn.sections.kit80 !== false ||
   uiOn.sections.kit90 !== true ||
+  uiOn.sections.convertInclude !== false ||
+  uiOn.sections.convertMatches !== true ||
   uiOn.currency !== "CAD"
 ) {
   throw new Error("parseQuiverUi should honor boolean section flags and currency");
@@ -799,6 +844,9 @@ if (uiLegacy.currency !== "USD") {
 if (uiLegacy.sections.kit80 !== true || uiLegacy.sections.kit90 !== true) {
   throw new Error("legacy prefs without kit80/kit90 must default both kits open");
 }
+if (uiLegacy.sections.convertInclude !== true || uiLegacy.sections.convertMatches !== false) {
+  throw new Error("legacy prefs must default convertInclude open and convertMatches collapsed");
+}
 const uiJunk = parseQuiverUi({ version: 1, owner: null, parts: { frontIds: [] } });
 if (
   uiJunk.sections.gaps !== true ||
@@ -806,12 +854,14 @@ if (
   uiJunk.sections.brandConvert !== false ||
   uiJunk.sections.kit80 !== true ||
   uiJunk.sections.kit90 !== true ||
+  uiJunk.sections.convertInclude !== true ||
+  uiJunk.sections.convertMatches !== false ||
   uiJunk.currency !== "USD"
 ) {
   throw new Error("inventory-shaped blobs must not parse as UI prefs");
 }
 console.log(
-  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed kits open currency=${uiDefault.currency}`,
+  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed kits open convertInclude open convertMatches collapsed currency=${uiDefault.currency}`,
 );
 
 section("Manufacturer prices");
