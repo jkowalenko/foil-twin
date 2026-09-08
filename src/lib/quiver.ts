@@ -13,6 +13,7 @@ import type {
   Fuselage,
   Goal,
   Mast,
+  MastFamilyId,
   NamedSetup,
   QuiverDoc,
   Setup,
@@ -276,11 +277,22 @@ const MAST_IDEAL_MM: Record<Discipline, number> = {
   race: 950,
 };
 
-function pickMastForKit(brand: Brand, disc: Discipline): Mast | null {
+function pickMastForKit(
+  brand: Brand,
+  disc: Discipline,
+  srcFamilyId?: MastFamilyId,
+): Mast | null {
   const band = MAST_BAND[disc];
-  const pool = catalog.masts.filter(
+  let pool = catalog.masts.filter(
     (m) => m.brand === brand && !m.motorIntegrated && (m.length_mm ?? 0) >= band.min,
   );
+  // When converting from an owned mast, stay inside the twin mast class — never
+  // let a length-only band pick land on UHM Plus / Black instead of High Modulus.
+  if (srcFamilyId) {
+    const twinFams = twinMastFamilies(srcFamilyId, brand);
+    const narrowed = pool.filter((m) => twinFams.includes(m.familyId));
+    if (narrowed.length) pool = narrowed;
+  }
   if (!pool.length) return pickMastForBand(brand, band.min, []);
   const target = MAST_IDEAL_MM[disc];
   return [...pool].sort(
@@ -1023,6 +1035,15 @@ function scoreKitCandidate(
     const band = MAST_BAND[preferredDiscipline(doc)];
     if (m && (m.length_mm ?? 0) >= band.min) s += 24;
     else if (m) s -= 12;
+    // Prefer masts in the twin family of an owned mast over length-only band picks.
+    if (m) {
+      const owned = ownedMasts(doc).filter((o) => !o.motorIntegrated);
+      if (
+        owned.some((o) => twinMastFamilies(o.familyId, m.brand).includes(m.familyId))
+      ) {
+        s += 28;
+      }
+    }
   }
   return s;
 }
@@ -1123,8 +1144,19 @@ function pickCompleteKit(args: {
       if (near) mastCands.push({ id: near.id, source: "twin" });
     }
   }
-  const bandMast = pickMastForKit(to, disc);
-  if (bandMast) mastCands.push({ id: bandMast.id, source: "band" });
+  // Band fallback must respect twin families when an owned mast exists.
+  const bandMast = pickMastForKit(to, disc, srcMast?.familyId);
+  if (bandMast) {
+    if (srcMast) {
+      const twinFams = twinMastFamilies(srcMast.familyId, to);
+      if (twinFams.includes(bandMast.familyId)) {
+        mastCands.push({ id: bandMast.id, source: "band" });
+      }
+      // else: owned mast present — never let an out-of-class band pick override family twins
+    } else {
+      mastCands.push({ id: bandMast.id, source: "band" });
+    }
+  }
 
   const kit: ConvertBuyItem[] = [];
   const addKind = (kind: ConvertRow["kind"], id: string | null, kindChecked: boolean) => {
@@ -1416,7 +1448,9 @@ export function brandConvert(
       why: t
         ? p.motorIntegrated || t.motorIntegrated
           ? `Closest length (${p.length_mm ?? "—"} → ${t.length_mm ?? "—"} mm). Motor-integrated masts are a different product even when the number matches.`
-          : `Closest published length (${p.length_mm ?? "—"} → ${t.length_mm ?? "—"} mm).`
+          : twinMastFamilies(p.familyId, t.brand).includes(t.familyId)
+            ? `Same mast class / ${t.familyOfficial} twin; closest length (${p.length_mm ?? "—"} → ${t.length_mm ?? "—"} mm).`
+            : `Closest published length (${p.length_mm ?? "—"} → ${t.length_mm ?? "—"} mm).`
         : "No mast match.",
     });
   }

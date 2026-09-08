@@ -494,7 +494,14 @@ function whyMast(a: Mast, b: Mast): string[] {
   const len = mastDeltaWords(a.length_mm, b.length_mm);
   if (len) bits.push(len);
   if (twinMastFamilies(a.familyId, b.brand).includes(b.familyId)) {
-    bits.push("same mast class (family twin)");
+    const primary = twinMastFamilies(a.familyId, b.brand)[0];
+    if (b.familyId === "code-hm" || a.familyId === "code-hm" || b.familyId === "axis-pc-hm" || a.familyId === "axis-pc-hm") {
+      bits.push("same mast class / High Modulus twin");
+    } else if (b.familyId === primary) {
+      bits.push("same mast class (primary family twin)");
+    } else {
+      bits.push("same mast class (family twin)");
+    }
   }
   const ba = mastMaterialBucket(a);
   const bb = mastMaterialBucket(b);
@@ -526,6 +533,7 @@ export function rankMastTwins(
   const brand = opts?.targetBrand ?? otherBrand(from.brand);
   if (brand === from.brand) return [];
   const families = twinMastFamilies(from.familyId, brand);
+  const primaryFamily = families[0];
   const others = catalog.masts.filter((m) => m.brand === brand);
   const inFamily = others.filter((m) => families.includes(m.familyId));
   const pool =
@@ -537,9 +545,12 @@ export function rankMastTwins(
     const s = scoreMastPair(from, m);
     if (s.score == null) continue;
     // Prefer length within the mapped family; family match is already enforced by pool.
+    // Clear bonus for the primary twin family so e.g. Pro → UHM Plus beats Black when
+    // lengths are comparable, and PCHM → High Modulus stays preferred.
+    const primaryBonus = primaryFamily && m.familyId === primaryFamily ? 12 : 0;
     ranked.push({
       part: m,
-      score: s.score * 100,
+      score: s.score * 100 + primaryBonus,
       why: whyMast(from, m),
       skipped: s.parts.filter((p) => p.skipped).map((p) => p.key),
     });

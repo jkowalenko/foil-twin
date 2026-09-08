@@ -1192,9 +1192,37 @@ assertMastTo("code-alloy-750", "axis", ["axis-al-19"]);
 assertMastTo("code-alloy-750", "armstrong", ["arm-alloy"]);
 assertMastTo("axis-pc-900", "code", ["code-hm"]);
 assertMastTo("axis-pchm-900", "code", ["code-hm"]);
+{
+  const pchm = nearestMast("axis-pchm-900", "code");
+  if (!pchm || !pchm.id.startsWith("code-hm-")) {
+    throw new Error(`axis-pchm-900 → code expected code-hm-*, got ${pchm?.id}`);
+  }
+  if (!pchm.familyOfficial.includes("High Modulus")) {
+    throw new Error(`code-hm display should say High Modulus, got "${pchm.familyOfficial}"`);
+  }
+  console.log(`PCHM display check: ${pchm.id} familyOfficial="${pchm.familyOfficial}"`);
+}
 assertMastTo("code-hm-800", "axis", ["axis-pc-hm"]);
 assertMastTo("code-hm-800", "armstrong", ["arm-perf-mk2"]);
-assertMastTo("axis-pro-800", "code", ["code-uhm-plus", "code-black"]);
+// Primary UHM twin is Plus, not Black, when lengths are comparable.
+assertMastTo("axis-pro-800", "code", ["code-uhm-plus"]);
+assertMastTo("axis-pro-900", "code", ["code-uhm-plus"]);
+{
+  const pro = nearestMast("axis-pro-900", "code");
+  if (!pro || pro.familyId !== "code-uhm-plus") {
+    throw new Error(`Pro → Code should prefer code-uhm-plus over Black, got ${pro?.id}`);
+  }
+  const ranked = rankMastTwins(
+    catalog.masts.find((m) => m.id === "axis-pro-900")!,
+    4,
+    { targetBrand: "code" },
+  );
+  const topFam = ranked[0]?.part.familyId;
+  if (topFam !== "code-uhm-plus") {
+    throw new Error(`rankMastTwins Pro primary should be code-uhm-plus, got ${topFam}`);
+  }
+  console.log(`Pro→Code ranked: ${ranked.map((t) => t.part.id).join(", ")}`);
+}
 assertMastTo("code-uhm-plus-850", "axis", ["axis-pro-uhm"]);
 assertMastTo("code-black-800", "armstrong", ["arm-perf-x"]);
 assertMastTo("axis-fd-uhm-800", "code", ["code-fd"]);

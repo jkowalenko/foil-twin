@@ -768,7 +768,7 @@ export const codeMasts: Mast[] = [
   mast({
     id: "code-hm-750",
     familyId: "code-hm",
-    familyOfficial: "Original Mast",
+    familyOfficial: "High Modulus Mast",
     sizeLabel: "75 cm",
     length_mm: 750,
     construction: hmCarbon,
@@ -778,7 +778,7 @@ export const codeMasts: Mast[] = [
   mast({
     id: "code-hm-800",
     familyId: "code-hm",
-    familyOfficial: "Original Mast",
+    familyOfficial: "High Modulus Mast",
     sizeLabel: "80 cm",
     length_mm: 800,
     construction: hmCarbon,
@@ -788,7 +788,7 @@ export const codeMasts: Mast[] = [
   mast({
     id: "code-hm-850",
     familyId: "code-hm",
-    familyOfficial: "Original Mast",
+    familyOfficial: "High Modulus Mast",
     sizeLabel: "85 cm",
     length_mm: 850,
     construction: hmCarbon,

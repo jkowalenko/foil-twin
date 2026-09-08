@@ -1599,7 +1599,7 @@ export const MAST_FAMILY_LABEL: Record<MastFamilyId, string> = {
   "arm-fd-assist": "Armstrong Foil Drive Assist",
   "arm-fd-efoil": "Armstrong Foil Drive E-Foil",
   "code-alloy": "Code Aluminium Mast",
-  "code-hm": "Code Original Mast",
+  "code-hm": "Code High Modulus Mast",
   "code-uhm-plus": "Code Plus Mast",
   "code-black": "Code Black Series",
   "code-fd": "Code Foil Drive Integrated",

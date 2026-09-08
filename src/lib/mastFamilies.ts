@@ -11,14 +11,15 @@ import { otherBrand } from "./format";
  * uhm-pro:      axis-pro-uhm (+kaiwi) / arm-perf-x / code-uhm-plus (+code-black)
  * fd:           axis-fd-* / arm-fd-* / code-fd
  *
- * Code Original HM sits in both entry-carbon (when coming from Axis PC / Fatty /
- * Armstrong Carbon Mk II) and hm-perf (when coming from Axis PC-HM / Armstrong
- * Performance Mk II). Reverse from code-hm prefers hm-perf.
+ * Code High Modulus (official product page: "Original Mast") sits in both
+ * entry-carbon (when coming from Axis PC / Fatty / Armstrong Carbon Mk II) and
+ * hm-perf (when coming from Axis PC-HM / Armstrong Performance Mk II). Reverse
+ * from code-hm prefers hm-perf.
  *
  * Primary reverse targets when several families share a class:
  * - Axis: PC (not Fatty), PC-HM, PRO UHM (not Kaiwi), FD UHM (not HM FD)
  * - Armstrong: Carbon Mk II, Performance Mk II, Performance-X, Assist (not E-Foil)
- * - Code: Plus (not Black) in UHM class; Original HM in both carbon classes
+ * - Code: Plus (not Black) in UHM class; High Modulus in both carbon classes
  */
 export type MastClassId = "alloy" | "entry-carbon" | "hm-perf" | "uhm-pro" | "fd";
 
