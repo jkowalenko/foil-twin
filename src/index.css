@@ -1468,3 +1468,33 @@ code {
 .panel-chevron-btn:hover .chevron {
   border-color: var(--text);
 }
+
+.convert-title {
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+.convert-header-brands {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.convert-header-brand {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 8px;
+  padding: 2px 6px;
+  cursor: pointer;
+  opacity: 0.55;
+  min-height: 28px;
+}
+.convert-header-brand:hover {
+  opacity: 0.85;
+  border-color: var(--line-strong);
+}
+.convert-header-brand.on {
+  opacity: 1;
+  border-color: var(--line-strong);
+  background: var(--chip-on, rgba(255, 255, 255, 0.06));
+}

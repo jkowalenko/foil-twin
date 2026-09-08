@@ -429,9 +429,31 @@ export function QuiverView({ onAdopt }: Props) {
           id="brandConvert"
           label="Brand convert"
           title={
-            <span className="h-with-logo">
-              <BrandMark brand={convertTo} size="sm" />
+            <span className="h-with-logo convert-title">
               Brand convert
+              <span
+                className="convert-header-brands"
+                role="group"
+                aria-label="Convert to brand"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                {otherBrands(home).map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    className={`convert-header-brand${convertTo === b ? " on" : ""}`}
+                    aria-pressed={convertTo === b}
+                    title={brandName(b)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConvertTo(b);
+                    }}
+                  >
+                    <BrandMark brand={b} size="sm" />
+                  </button>
+                ))}
+              </span>
             </span>
           }
           sub={`Starter and more-complete ${brandName(convertTo)} kits closest to what you ride`}
