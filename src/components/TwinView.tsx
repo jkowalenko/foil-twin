@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Setup } from "../data/types";
-import { brandName, otherBrand, setupLabel } from "../lib/format";
+import type { Brand, Setup } from "../data/types";
+import { brandName, otherBrand, otherBrands, setupLabel } from "../lib/format";
 import { MIN_FRONT_TWIN, groupTwinsByFront, rankTwins, resolveSetup } from "../lib/match";
-import { BrandMark } from "./BrandMark";
+import { BrandMark, BrandToggle } from "./BrandMark";
 import { SetupBuilder } from "./SetupBuilder";
 import { SpecStack } from "./SpecStack";
 import { TwinCard } from "./TwinCard";
@@ -15,15 +15,21 @@ type Props = {
 
 export function TwinView({ setup, onChange, onAdopt }: Props) {
   const resolved = resolveSetup(setup);
+  const [targetBrand, setTargetBrand] = useState<Brand>(() => otherBrand(setup.brand));
+  useEffect(() => {
+    if (targetBrand === setup.brand) {
+      setTargetBrand(otherBrand(setup.brand));
+    }
+  }, [setup.brand, targetBrand]);
   const twins = useMemo(
-    () => rankTwins(setup, 120, { minFrontScore: MIN_FRONT_TWIN }),
-    [setup],
+    () => rankTwins(setup, 120, { minFrontScore: MIN_FRONT_TWIN, targetBrand }),
+    [setup, targetBrand],
   );
   const groups = useMemo(() => groupTwinsByFront(twins).slice(0, 8), [twins]);
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   useEffect(() => {
     setPickedKey(null);
-  }, [setup.frontId, setup.fuseId, setup.tailId]);
+  }, [setup.frontId, setup.fuseId, setup.tailId, targetBrand]);
   const flat = groups.flatMap((g) => [g.best, ...g.variants]);
   const active =
     flat.find(
@@ -58,8 +64,8 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
         <div className="panel-h">
           <div>
             <h2 className="h-with-logo">
-              <BrandMark brand={otherBrand(setup.brand)} size="sm" />
-              {brandName(otherBrand(setup.brand))} twin setups
+              <BrandMark brand={targetBrand} size="sm" />
+              {brandName(targetBrand)} twin setups
             </h2>
             <div className="sub">
               Other-brand setups that feel closest to what you ride, grouped by front
@@ -68,9 +74,15 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
           </div>
         </div>
         <div className="panel-b twin-list">
+          <BrandToggle
+            value={targetBrand}
+            onChange={setTargetBrand}
+            brands={otherBrands(setup.brand)}
+            size="sm"
+          />
           {groups.length === 0 && (
             <div className="empty-state">
-              No close {brandName(otherBrand(setup.brand))} twins for this front.
+              No close {brandName(targetBrand)} twins for this front.
               Try another size or family.
             </div>
           )}
@@ -116,7 +128,7 @@ export function TwinView({ setup, onChange, onAdopt }: Props) {
           {active && (
             <button
               type="button"
-              className="chip on arm"
+              className="chip on"
               onClick={() => onAdopt(active.setup)}
             >
               Load this twin as the current setup

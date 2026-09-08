@@ -1,5 +1,8 @@
 import type { Brand, FrontWing, Fuselage, Mast, Setup, TailWing } from "../data/types";
+import { BRANDS } from "../data/types";
 import { fuseById, frontById, mastById, tailById } from "../data/catalog";
+
+export { BRANDS };
 
 export function n(value: number | null | undefined, digits = 0, unit = ""): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -11,11 +14,25 @@ export function n(value: number | null | undefined, digits = 0, unit = ""): stri
 }
 
 export function brandName(brand: Brand): string {
-  return brand === "axis" ? "Axis" : "Armstrong";
+  if (brand === "axis") return "Axis";
+  if (brand === "armstrong") return "Armstrong";
+  return "Code";
 }
 
+/** CSS modifier: axis | arm | code (Armstrong stays `arm` from earlier UI). */
+export function brandMod(brand: Brand): "axis" | "arm" | "code" {
+  return brand === "armstrong" ? "arm" : brand;
+}
+
+export function otherBrands(brand: Brand): Brand[] {
+  return BRANDS.filter((b) => b !== brand);
+}
+
+/** Default twin target: Axis ↔ Armstrong; Code → Axis. Pass `targetBrand` to override. */
 export function otherBrand(brand: Brand): Brand {
-  return brand === "axis" ? "armstrong" : "axis";
+  if (brand === "axis") return "armstrong";
+  if (brand === "armstrong") return "axis";
+  return "axis";
 }
 
 export function frontTitle(f: FrontWing): string {

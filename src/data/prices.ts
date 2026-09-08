@@ -4,6 +4,8 @@
  * CAD is estimated at read time via Bank of Canada FX (never invented list CAD).
  * FX: 1 USD = 1.384 CAD (BoC daily average 2026-09-04).
  * Missing / unfound SKUs are absent from the map (treated as null).
+ * Code Foils does not sell foil parts online in USD (apparel AU-only on store.codefoils.com);
+ * every Code catalog id is unpriced (null).
  */
 
 export const PRICE_RETRIEVED = "2026-09-07";

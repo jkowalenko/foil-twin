@@ -5,9 +5,9 @@ import {
   catalog,
   fusesByBrand,
 } from "../data/catalog";
-import type { Brand, FrontFamilyId, Setup, TailFamilyId } from "../data/types";
+import { BRANDS, type Brand, type FrontFamilyId, type Setup, type TailFamilyId } from "../data/types";
 import { brandName } from "../lib/format";
-import { BrandMark } from "./BrandMark";
+import { BrandToggle } from "./BrandMark";
 
 type Props = {
   setup: Setup;
@@ -51,28 +51,7 @@ export function SetupBuilder({ setup, onChange }: Props) {
 
   return (
     <div>
-      <div className="brand-toggle logos-only">
-        <button
-          className={setup.brand === "axis" ? "on-axis" : ""}
-          onClick={() => setBrand("axis")}
-          type="button"
-          aria-label="Axis"
-          aria-pressed={setup.brand === "axis"}
-          title="Axis"
-        >
-          <BrandMark brand="axis" size="md" />
-        </button>
-        <button
-          className={setup.brand === "armstrong" ? "on-arm" : ""}
-          onClick={() => setBrand("armstrong")}
-          type="button"
-          aria-label="Armstrong"
-          aria-pressed={setup.brand === "armstrong"}
-          title="Armstrong"
-        >
-          <BrandMark brand="armstrong" size="md" />
-        </button>
-      </div>
+      <BrandToggle value={setup.brand} onChange={setBrand} brands={BRANDS} />
 
       <div className="field">
         <label>Front family</label>

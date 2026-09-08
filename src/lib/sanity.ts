@@ -1,4 +1,4 @@
-import { catalog, fusesByBrand } from "../data/catalog";
+import { FAMILY_COLOR, FRONT_FAMILY_ORDER, catalog, fusesByBrand } from "../data/catalog";
 import { GOALS, QUIVER_STORAGE_KEY, QUIVER_UI_STORAGE_KEY } from "../data/labels";
 import type { Goal, QuiverDoc, Setup } from "../data/types";
 import { frontTitle } from "./format";
@@ -100,12 +100,14 @@ function section(title: string) {
 section("Catalog counts");
 const axisF = catalog.fronts.filter((f) => f.brand === "axis");
 const armF = catalog.fronts.filter((f) => f.brand === "armstrong");
+const codeF = catalog.fronts.filter((f) => f.brand === "code");
 const axisM = catalog.masts.filter((m) => m.brand === "axis");
 const armM = catalog.masts.filter((m) => m.brand === "armstrong");
+const codeM = catalog.masts.filter((m) => m.brand === "code");
 console.log(
-  `Fronts Axis ${axisF.length} / Armstrong ${armF.length}; tails ${catalog.tails.length}; fuses ${catalog.fuselages.length}; masts Axis ${axisM.length} / Armstrong ${armM.length}`,
+  `Fronts Axis ${axisF.length} / Armstrong ${armF.length} / Code ${codeF.length}; tails ${catalog.tails.length}; fuses ${catalog.fuselages.length}; masts Axis ${axisM.length} / Armstrong ${armM.length} / Code ${codeM.length}`,
 );
-for (const brand of ["axis", "armstrong"] as const) {
+for (const brand of ["axis", "armstrong", "code"] as const) {
   const fams = [...new Set(catalog.fronts.filter((f) => f.brand === brand).map((f) => f.familyOfficial))];
   console.log(`  ${brand} families: ${fams.join(", ")}`);
   const mf = [...new Set(catalog.masts.filter((m) => m.brand === brand).map((m) => m.familyOfficial))];
@@ -937,3 +939,262 @@ for (const id of ["axis-al19-750", "axis-pro-800", "arm-pmk2-795", "arm-alloy-72
     `${m.familyOfficial} ${m.sizeLabel} → ${twins.map((t) => `${t.part.familyOfficial} ${t.part.sizeLabel} ${Math.round(t.score)}%`).join(" · ")}`,
   );
 }
+
+section("Code catalog presence");
+const codeMust = [
+  "code-s-850",
+  "code-r-860",
+  "code-x-810",
+  "code-kanga-1600",
+  "code-ar-158",
+  "code-rtail-120",
+  "code-race-100",
+  "code-fuse-xs",
+  "code-hm-800",
+  "code-uhm-plus-850",
+  "code-black-800",
+  "code-alloy-750",
+  "code-fd-780-11",
+  "code-fd-780-17",
+];
+for (const id of codeMust) {
+  const hit =
+    catalog.fronts.find((p) => p.id === id) ||
+    catalog.tails.find((p) => p.id === id) ||
+    catalog.fuselages.find((p) => p.id === id) ||
+    catalog.masts.find((p) => p.id === id);
+  if (!hit) throw new Error(`missing Code part ${id}`);
+  if (hit.brand !== "code") throw new Error(`${id} brand is ${hit.brand}, expected code`);
+}
+const codeFrontN = {
+  s: catalog.fronts.filter((f) => f.familyId === "code-s").length,
+  r: catalog.fronts.filter((f) => f.familyId === "code-r").length,
+  x: catalog.fronts.filter((f) => f.familyId === "code-x").length,
+  kanga: catalog.fronts.filter((f) => f.familyId === "code-kanga").length,
+};
+const codeTailN = {
+  ar: catalog.tails.filter((t) => t.familyId === "code-ar").length,
+  rtail: catalog.tails.filter((t) => t.familyId === "code-r-tail").length,
+  race: catalog.tails.filter((t) => t.familyId === "code-race").length,
+};
+const codeFuseN = catalog.fuselages.filter((f) => f.brand === "code").length;
+const codeMastN = {
+  hm: catalog.masts.filter((m) => m.familyId === "code-hm").length,
+  plus: catalog.masts.filter((m) => m.familyId === "code-uhm-plus").length,
+  black: catalog.masts.filter((m) => m.familyId === "code-black").length,
+  alloy: catalog.masts.filter((m) => m.familyId === "code-alloy").length,
+  fd: catalog.masts.filter((m) => m.familyId === "code-fd").length,
+};
+console.log(
+  `Code fronts S${codeFrontN.s} R${codeFrontN.r} X${codeFrontN.x} Kanga${codeFrontN.kanga}; tails AR${codeTailN.ar} R${codeTailN.rtail} Race${codeTailN.race}; fuses ${codeFuseN}; masts HM${codeMastN.hm} Plus${codeMastN.plus} Black${codeMastN.black} Alloy${codeMastN.alloy} FD${codeMastN.fd}`,
+);
+if (codeFrontN.s !== 9 || codeFrontN.r !== 7 || codeFrontN.x !== 7 || codeFrontN.kanga !== 4) {
+  throw new Error(`Code front counts wrong: ${JSON.stringify(codeFrontN)}`);
+}
+if (codeTailN.ar !== 6 || codeTailN.rtail !== 4 || codeTailN.race !== 2) {
+  throw new Error(`Code tail counts wrong: ${JSON.stringify(codeTailN)}`);
+}
+if (codeFuseN !== 5) throw new Error(`Code fuse count ${codeFuseN}, expected 5`);
+if (
+  codeMastN.hm !== 3 ||
+  codeMastN.plus !== 4 ||
+  codeMastN.black !== 3 ||
+  codeMastN.alloy !== 2 ||
+  codeMastN.fd !== 2
+) {
+  throw new Error(`Code mast counts wrong: ${JSON.stringify(codeMastN)}`);
+}
+const codePriced = codeMust.filter((id) => getPartPrice(id).usd != null);
+if (codePriced.length) {
+  throw new Error(`Code parts must be unpriced, got USD for ${codePriced.join(", ")}`);
+}
+const s850 = catalog.fronts.find((f) => f.id === "code-s-850")!;
+if (s850.span_mm !== 900 || s850.area_cm2 !== 850 || s850.aspect_ratio !== 9.5) {
+  throw new Error(`code-s-850 specs drifted: ${s850.span_mm}/${s850.area_cm2}/${s850.aspect_ratio}`);
+}
+const kanga1600 = catalog.fronts.find((f) => f.id === "code-kanga-1600")!;
+if (kanga1600.span_mm !== 1300 || kanga1600.area_cm2 !== 1600 || kanga1600.aspect_ratio !== 10.6) {
+  throw new Error("code-kanga-1600 specs drifted");
+}
+const fuseXs = catalog.fuselages.find((f) => f.id === "code-fuse-xs")!;
+if (fuseXs.fuse_length_mm !== 450 || fuseXs.familyOfficial !== "Code Fuselage") {
+  throw new Error("code-fuse-xs must store official length-from-front-of-mast 450 mm");
+}
+const black800 = catalog.masts.find((m) => m.id === "code-black-800")!;
+if (black800.thickness_mm !== 14.0 || black800.length_mm !== 800) {
+  throw new Error("code-black-800 thickness/length drifted");
+}
+const fd11 = catalog.masts.find((m) => m.id === "code-fd-780-11")!;
+if (!fd11.motorIntegrated || fd11.length_mm !== 780) {
+  throw new Error("code-fd-780-11 must be motor-integrated 780 mm");
+}
+
+section("Twin targetBrand (3-way)");
+const axisSetup = setup("axis-artv2-879", "axis-advplus-ultrashort", "axis-skinny-360-45");
+const axisToArm = rankTwins(axisSetup, 3);
+const axisToCode = rankTwins(axisSetup, 8, { minFrontScore: MIN_FRONT_TWIN, targetBrand: "code" });
+if (!axisToArm.length) throw new Error("Axis default twin (Armstrong) empty");
+if (axisToArm.some((t) => t.setup.brand !== "armstrong")) {
+  throw new Error("Axis default twin must stay Armstrong");
+}
+if (!axisToCode.length) throw new Error("Axis → Code twins empty");
+if (axisToCode.some((t) => t.setup.brand !== "code")) {
+  throw new Error("Axis → Code twins must be Code-only");
+}
+if (axisToCode.some((t) => (t.frontScore ?? 0) < MIN_FRONT_TWIN)) {
+  throw new Error("Axis → Code gated twins must keep MIN_FRONT_TWIN");
+}
+console.log(
+  `ART v2 879 → Armstrong ${describeTwin(axisToArm[0])} (${Math.round(axisToArm[0].total)}%); → Code ${describeTwin(axisToCode[0])} (${Math.round(axisToCode[0].total)}%)`,
+);
+
+const codeSetup = setup("code-s-850", "code-fuse-m", "code-ar-158");
+const codeToAxis = rankTwins(codeSetup, 3, { targetBrand: "axis" });
+const codeToArm = rankTwins(codeSetup, 3, { targetBrand: "armstrong" });
+if (!codeToAxis.length || codeToAxis.some((t) => t.setup.brand !== "axis")) {
+  throw new Error("Code → Axis twins missing/wrong brand");
+}
+if (!codeToArm.length || codeToArm.some((t) => t.setup.brand !== "armstrong")) {
+  throw new Error("Code → Armstrong twins missing/wrong brand");
+}
+const sameBrand = rankTwins(codeSetup, 3, { targetBrand: "code" });
+if (sameBrand.length) throw new Error("targetBrand same as ride brand must return no twins");
+console.log(
+  `850S → Axis ${describeTwin(codeToAxis[0])} (${Math.round(codeToAxis[0].total)}%); → Armstrong ${describeTwin(codeToArm[0])} (${Math.round(codeToArm[0].total)}%)`,
+);
+
+section("Map 3 legend rows / Code greens");
+for (const id of ["code-s", "code-r", "code-x", "code-kanga"] as const) {
+  if (!FRONT_FAMILY_ORDER.includes(id)) throw new Error(`FRONT_FAMILY_ORDER missing ${id}`);
+}
+if (FAMILY_COLOR["code-s"] !== "#52b788") throw new Error(`code-s color ${FAMILY_COLOR["code-s"]}`);
+if (FAMILY_COLOR["code-r"] !== "#2d6a4f") throw new Error(`code-r color ${FAMILY_COLOR["code-r"]}`);
+if (FAMILY_COLOR["code-x"] !== "#95d5b2") throw new Error(`code-x color ${FAMILY_COLOR["code-x"]}`);
+if (FAMILY_COLOR["code-kanga"] !== "#1b4332") throw new Error(`code-kanga color ${FAMILY_COLOR["code-kanga"]}`);
+const legendBrands = new Set(
+  FRONT_FAMILY_ORDER.map((id) => catalog.fronts.find((f) => f.familyId === id)?.brand).filter(Boolean),
+);
+if (legendBrands.size !== 3) throw new Error(`map legend brands ${[...legendBrands].join(",")}`);
+console.log(`legend families ${FRONT_FAMILY_ORDER.join(", ")}`);
+
+section("Mast map Code ↔ others");
+function assertMastTo(fromId: string, target: "axis" | "armstrong" | "code", expectFamilies: string[]) {
+  const m = catalog.masts.find((x) => x.id === fromId);
+  if (!m) throw new Error(`missing mast ${fromId}`);
+  const twin = nearestMast(fromId, target);
+  if (!twin) throw new Error(`no twin for ${fromId} → ${target}`);
+  if (twin.brand !== target) throw new Error(`${fromId} twin brand ${twin.brand}, expected ${target}`);
+  if (!expectFamilies.includes(twin.familyId)) {
+    throw new Error(`${fromId} → ${target} got ${twin.id} (${twin.familyId}), expected ${expectFamilies.join("|")}`);
+  }
+  console.log(
+    `${m.familyOfficial} ${m.sizeLabel} → ${target} ${twin.familyOfficial} ${twin.sizeLabel} [${twin.familyId}]`,
+  );
+}
+assertMastTo("axis-al19-750", "code", ["code-alloy"]);
+assertMastTo("code-alloy-750", "axis", ["axis-al-19"]);
+assertMastTo("code-alloy-750", "armstrong", ["arm-alloy"]);
+assertMastTo("axis-pc-900", "code", ["code-hm"]);
+assertMastTo("axis-pchm-900", "code", ["code-hm"]);
+assertMastTo("code-hm-800", "axis", ["axis-pc-hm"]);
+assertMastTo("code-hm-800", "armstrong", ["arm-perf-mk2"]);
+assertMastTo("axis-pro-800", "code", ["code-uhm-plus", "code-black"]);
+assertMastTo("code-uhm-plus-850", "axis", ["axis-pro-uhm"]);
+assertMastTo("code-black-800", "armstrong", ["arm-perf-x"]);
+assertMastTo("axis-fd-uhm-800", "code", ["code-fd"]);
+assertMastTo("code-fd-780-11", "axis", ["axis-fd-uhm", "axis-fd-hm"]);
+if (twinMastFamily("axis-pc-hm") !== "arm-perf-mk2") {
+  throw new Error("Axis↔Armstrong mast map must stay equivalent");
+}
+if (twinMastFamily("axis-pro-uhm") !== "arm-perf-x") {
+  throw new Error("Pro UHM must still twin Performance-X");
+}
+
+section("Convert kits involving Code");
+const axisToCodeKit = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: ["axis-al19-750"],
+      fuseIds: ["axis-advplus-ultrashort"],
+      frontIds: ["axis-artv2-879", "axis-artv2-939"],
+      tailIds: ["axis-skinny-360-45"],
+    },
+  }),
+  undefined,
+  "code",
+);
+if (!axisToCodeKit || axisToCodeKit.to !== "code" || axisToCodeKit.from !== "axis") {
+  throw new Error("Axis → Code convert missing or wrong brands");
+}
+assertCompleteKit("Axis → Code", axisToCodeKit);
+assertRiderConvertCopy("Axis → Code", axisToCodeKit);
+console.log(
+  `Axis→Code 80%: ${axisToCodeKit.coverageTiers
+    .find((t) => t.pct === 80)!
+    .items.map((i) => `${i.kind}:${i.twinTitle}`)
+    .join(" · ")}`,
+);
+
+const codeToArmKit = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: ["code-hm-800"],
+      fuseIds: ["code-fuse-m"],
+      frontIds: ["code-s-850", "code-r-860"],
+      tailIds: ["code-ar-158"],
+    },
+  }),
+  undefined,
+  "armstrong",
+);
+if (!codeToArmKit || codeToArmKit.to !== "armstrong" || codeToArmKit.from !== "code") {
+  throw new Error("Code → Armstrong convert missing or wrong brands");
+}
+assertCompleteKit("Code → Armstrong", codeToArmKit);
+assertRiderConvertCopy("Code → Armstrong", codeToArmKit);
+console.log(
+  `Code→Armstrong 80%: ${codeToArmKit.coverageTiers
+    .find((t) => t.pct === 80)!
+    .items.map((i) => `${i.kind}:${i.twinTitle}`)
+    .join(" · ")}`,
+);
+
+const armToCodeKit = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: ["arm-pmk2-795"],
+      fuseIds: ["arm-tc-60"],
+      frontIds: ["arm-ha-880"],
+      tailIds: ["arm-speed-180"],
+    },
+  }),
+  undefined,
+  "code",
+);
+if (!armToCodeKit || armToCodeKit.to !== "code") {
+  throw new Error("Armstrong → Code convert missing");
+}
+assertCompleteKit("Armstrong → Code", armToCodeKit);
+console.log(
+  `Armstrong→Code 80%: ${armToCodeKit.coverageTiers
+    .find((t) => t.pct === 80)!
+    .items.map((i) => `${i.kind}:${i.twinTitle}`)
+    .join(" · ")}`,
+);
+
+const stillArm = brandConvert(
+  quiverDoc({
+    parts: {
+      mastIds: ["axis-al19-750"],
+      fuseIds: ["axis-advplus-ultrashort"],
+      frontIds: ["axis-artv2-879"],
+      tailIds: ["axis-skinny-360-45"],
+    },
+  }),
+);
+if (!stillArm || stillArm.to !== "armstrong") {
+  throw new Error("Default Axis convert must still target Armstrong");
+}
+assertCompleteKit("Axis → Armstrong default still", stillArm);
+console.log("Axis↔Armstrong default convert still complete");
+

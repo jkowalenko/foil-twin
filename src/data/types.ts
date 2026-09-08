@@ -1,4 +1,6 @@
-export type Brand = "axis" | "armstrong";
+export type Brand = "axis" | "armstrong" | "code";
+
+export const BRANDS: Brand[] = ["axis", "armstrong", "code"];
 
 export type Source = {
   url: string;
@@ -15,7 +17,11 @@ export type FrontFamilyId =
   | "fireball"
   | "uha"
   | "ha"
-  | "ma-mk2";
+  | "ma-mk2"
+  | "code-s"
+  | "code-r"
+  | "code-x"
+  | "code-kanga";
 
 export type TailFamilyId =
   | "skinny-surf"
@@ -23,7 +29,10 @@ export type TailFamilyId =
   | "progressive"
   | "speed"
   | "dart"
-  | "surf";
+  | "surf"
+  | "code-ar"
+  | "code-r-tail"
+  | "code-race";
 
 export type TailRole = "speed" | "dart" | "surf";
 
@@ -97,7 +106,12 @@ export type MastFamilyId =
   | "arm-perf-mk2"
   | "arm-perf-x"
   | "arm-fd-assist"
-  | "arm-fd-efoil";
+  | "arm-fd-efoil"
+  | "code-hm"
+  | "code-uhm-plus"
+  | "code-black"
+  | "code-alloy"
+  | "code-fd";
 
 export type Mast = {
   id: string;
@@ -122,6 +136,7 @@ export type Mast = {
 export type Catalog = {
   retrieved: string;
   mastRetrieved: string;
+  codeRetrieved: string;
   fronts: FrontWing[];
   tails: TailWing[];
   fuselages: Fuselage[];

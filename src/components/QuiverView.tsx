@@ -8,17 +8,9 @@ import {
   catalog,
 } from "../data/catalog";
 import { DISCIPLINES, GOALS, LEVELS } from "../data/labels";
-import type {
-  Brand,
-  Discipline,
-  Goal,
-  NamedSetup,
-  QuiverDoc,
-  RiderLevel,
-  Setup,
-} from "../data/types";
+import { BRANDS, type Brand, type Discipline, type Goal, type NamedSetup, type QuiverDoc, type RiderLevel, type Setup } from "../data/types";
 import { FX_DATE, FX_USD_TO_CAD, PRICE_RETRIEVED, priceForCurrency, type CurrencyCode } from "../data/prices";
-import { brandName, formatMoney, otherBrand } from "../lib/format";
+import { brandMod, brandName, formatMoney, otherBrand, otherBrands } from "../lib/format";
 import {
   analyzeGaps,
   brandConvert,
@@ -39,7 +31,7 @@ import {
   saveQuiverUi,
   type QuiverUiPrefs,
 } from "../lib/quiverUi";
-import { BrandMark } from "./BrandMark";
+import { BrandMark, BrandToggle } from "./BrandMark";
 
 type Props = {
   onAdopt: (s: Setup) => void;
@@ -56,6 +48,7 @@ export function QuiverView({ onAdopt }: Props) {
     90: null,
   });
   const [ui, setUi] = useState<QuiverUiPrefs>(() => loadQuiverUi());
+  const [convertTo, setConvertTo] = useState<Brand>(() => otherBrand(majorityBrand(doc)));
   const draftRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,8 +89,8 @@ export function QuiverView({ onAdopt }: Props) {
       fuseIds: doc.parts.fuseIds.filter((id) => !convertOff.has(id)),
       mastIds: doc.parts.mastIds.filter((id) => !convertOff.has(id)),
     };
-    return brandConvert(doc, include);
-  }, [doc, convertOff]);
+    return brandConvert(doc, include, convertTo);
+  }, [doc, convertOff, convertTo]);
 
   const convertBaselineKey = useMemo(() => {
     if (!convert) return "";
@@ -111,6 +104,9 @@ export function QuiverView({ onAdopt }: Props) {
   }, [convertBaselineKey]);
 
   const home = majorityBrand(doc);
+  useEffect(() => {
+    if (convertTo === home) setConvertTo(otherBrand(home));
+  }, [home, convertTo]);
 
   function kitItemsFor(pct: 80 | 90): ConvertBuyItem[] {
     const edited = kitEdits[pct];
@@ -434,11 +430,11 @@ export function QuiverView({ onAdopt }: Props) {
           label="Brand convert"
           title={
             <span className="h-with-logo">
-              <BrandMark brand={otherBrand(home)} size="sm" />
+              <BrandMark brand={convertTo} size="sm" />
               Brand convert
             </span>
           }
-          sub={`Starter and more-complete ${brandName(otherBrand(home))} kits closest to what you ride`}
+          sub={`Starter and more-complete ${brandName(convertTo)} kits closest to what you ride`}
           open={ui.sections.brandConvert}
           onToggle={() => toggleSection("brandConvert")}
           headerExtra={
@@ -482,6 +478,15 @@ export function QuiverView({ onAdopt }: Props) {
           )}
           {convert && (
             <>
+              <div className="field convert-target">
+                <label>Convert to</label>
+                <BrandToggle
+                  value={convertTo}
+                  onChange={setConvertTo}
+                  brands={otherBrands(home)}
+                  size="sm"
+                />
+              </div>
               {ownedConvert.length > 0 && (
                 <div className="convert-include">
                   <div className="convert-kind-h">Tick parts to include</div>
@@ -669,7 +674,8 @@ export function QuiverView({ onAdopt }: Props) {
               )}
               <p className="price-footnote">
                 Manufacturer list prices as of {PRICE_RETRIEVED} (not live cart quotes). CAD est. from
-                USD @ {FX_USD_TO_CAD} ({FX_DATE}, Bank of Canada).
+                USD @ {FX_USD_TO_CAD} ({FX_DATE}, Bank of Canada). Code foil parts are unpriced
+                (codefoils.com does not sell them online in USD).
               </p>
             </>
           )}
@@ -943,28 +949,7 @@ function SetupDraft({
 
   return (
     <div className="setup-draft">
-      <div className="brand-toggle logos-only">
-        <button
-          type="button"
-          className={draft.brand === "axis" ? "on-axis" : ""}
-          onClick={() => setBrand("axis")}
-          aria-label="Axis"
-          aria-pressed={draft.brand === "axis"}
-          title="Axis"
-        >
-          <BrandMark brand="axis" size="md" />
-        </button>
-        <button
-          type="button"
-          className={draft.brand === "armstrong" ? "on-arm" : ""}
-          onClick={() => setBrand("armstrong")}
-          aria-label="Armstrong"
-          aria-pressed={draft.brand === "armstrong"}
-          title="Armstrong"
-        >
-          <BrandMark brand="armstrong" size="md" />
-        </button>
-      </div>
+      <BrandToggle value={draft.brand} onChange={setBrand} brands={BRANDS} />
       <div className="field">
         <label>Label</label>
         <input
@@ -1222,26 +1207,19 @@ function PartPicker({
 function BrandMini({ brand, onBrand }: { brand: Brand; onBrand: (b: Brand) => void }) {
   return (
     <div className="chips" style={{ margin: "8px 0" }}>
-      <button
-        type="button"
-        className={`chip logo-chip${brand === "axis" ? " on" : ""}`}
-        onClick={() => onBrand("axis")}
-        aria-label="Axis"
-        aria-pressed={brand === "axis"}
-        title="Axis"
-      >
-        <BrandMark brand="axis" size="sm" />
-      </button>
-      <button
-        type="button"
-        className={`chip logo-chip${brand === "armstrong" ? " on arm" : ""}`}
-        onClick={() => onBrand("armstrong")}
-        aria-label="Armstrong"
-        aria-pressed={brand === "armstrong"}
-        title="Armstrong"
-      >
-        <BrandMark brand="armstrong" size="sm" />
-      </button>
+      {BRANDS.map((b) => (
+        <button
+          key={b}
+          type="button"
+          className={`chip logo-chip${brand === b ? ` on ${brandMod(b)}` : ""}`}
+          onClick={() => onBrand(b)}
+          aria-label={brandName(b)}
+          aria-pressed={brand === b}
+          title={brandName(b)}
+        >
+          <BrandMark brand={b} size="sm" />
+        </button>
+      ))}
     </div>
   );
 }

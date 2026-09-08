@@ -14,6 +14,8 @@
   --axis-2: #f3c38a;
   --arm: #3ec9c0;
   --arm-2: #7ee0d6;
+  --code: #52b788;
+  --code-2: #95d5b2;
   --ok: #8ee0a8;
   --warn: #f0c36a;
   --hot: #ef7a6a;
@@ -31,6 +33,7 @@
   --panel-bot: rgba(10, 24, 34, 0.88);
   --chip-on-bg: rgba(232, 160, 90, 0.12);
   --arm-on-bg: rgba(62, 201, 192, 0.12);
+  --code-on-bg: rgba(82, 183, 136, 0.14);
   --radius: 18px;
   --sidebar-w: minmax(320px, 400px);
   --font: "Outfit", system-ui, sans-serif;
@@ -53,6 +56,8 @@
   --axis-2: #a85e18;
   --arm: #1a9e96;
   --arm-2: #0e7f79;
+  --code: #2d6a4f;
+  --code-2: #1b4332;
   --ok: #2a8a4a;
   --warn: #b07a12;
   --hot: #c24b3c;
@@ -70,6 +75,7 @@
   --panel-bot: rgba(247, 250, 251, 0.94);
   --chip-on-bg: rgba(198, 120, 46, 0.12);
   --arm-on-bg: rgba(26, 158, 150, 0.12);
+  --code-on-bg: rgba(45, 106, 79, 0.12);
 }
 
 * {
@@ -318,6 +324,12 @@ input:focus-visible {
   gap: 8px;
   margin-bottom: 14px;
 }
+.brand-toggle.cols-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.brand-toggle.cols-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
 .brand-toggle button {
   border: 1px solid var(--line);
   background: var(--elev);
@@ -354,6 +366,10 @@ input:focus-visible {
   border-color: rgba(62, 201, 192, 0.55);
   background: rgba(62, 201, 192, 0.12);
 }
+.brand-toggle button.on-code {
+  border-color: rgba(82, 183, 136, 0.6);
+  background: var(--code-on-bg);
+}
 
 .field {
   display: flex;
@@ -378,6 +394,9 @@ input:focus-visible {
 }
 .field select:focus {
   border-color: var(--arm);
+}
+.field.convert-target .brand-toggle {
+  margin-bottom: 0;
 }
 
 .stack {
@@ -408,6 +427,9 @@ input:focus-visible {
 }
 .part-name.arm {
   color: var(--arm-2);
+}
+.part-name.code {
+  color: var(--code-2);
 }
 
 .note {
@@ -663,6 +685,10 @@ input:focus-visible {
   border-color: var(--arm);
   background: var(--arm-on-bg);
 }
+.chip.on.code {
+  border-color: var(--code);
+  background: var(--code-on-bg);
+}
 .part-chip {
   display: inline-flex;
   align-items: center;
@@ -759,15 +785,34 @@ input:focus-visible {
 .brand-mark.md .arm-wordmark img {
   height: 22px;
 }
+.code-wordmark {
+  display: inline-grid;
+  align-items: center;
+  line-height: 0;
+  flex-shrink: 0;
+}
+.code-wordmark img {
+  grid-area: 1 / 1;
+  display: block;
+  height: 18px;
+  width: auto;
+  max-width: none;
+}
+.brand-mark.md .code-wordmark img {
+  height: 22px;
+}
 /* Default / dark: white lettering. Light theme: navy/blue lettering.
    Use display (not visibility) so the hidden asset cannot paint a plate. */
-.arm-wordmark-light {
+.arm-wordmark-light,
+.code-wordmark-light {
   display: none;
 }
-:root[data-theme="light"] .arm-wordmark-dark {
+:root[data-theme="light"] .arm-wordmark-dark,
+:root[data-theme="light"] .code-wordmark-dark {
   display: none;
 }
-:root[data-theme="light"] .arm-wordmark-light {
+:root[data-theme="light"] .arm-wordmark-light,
+:root[data-theme="light"] .code-wordmark-light {
   display: block;
 }
 .brand-mark-label {

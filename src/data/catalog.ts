@@ -9,7 +9,8 @@ import type {
   TailRole,
   TailWing,
 } from "./types";
-import { MAST_RETRIEVED, RETRIEVED, src, URLS } from "./sources";
+import { codeFronts, codeFuses, codeMasts, codeTails } from "./code";
+import { MAST_RETRIEVED, RETRIEVED, CODE_RETRIEVED, src, URLS } from "./sources";
 import { masts } from "./masts";
 
 const carbonUhm = "Ultra High Modulus carbon";
@@ -1470,10 +1471,11 @@ const fuselages: Fuselage[] = [
 export const catalog: Catalog = {
   retrieved: RETRIEVED,
   mastRetrieved: MAST_RETRIEVED,
-  fronts,
-  tails,
-  fuselages,
-  masts,
+  codeRetrieved: CODE_RETRIEVED,
+  fronts: [...fronts, ...codeFronts],
+  tails: [...tails, ...codeTails],
+  fuselages: [...fuselages, ...codeFuses],
+  masts: [...masts, ...codeMasts],
 };
 
 export function frontById(id: string): FrontWing | undefined {
@@ -1510,6 +1512,10 @@ export const FRONT_FAMILY_ORDER: FrontFamilyId[] = [
   "uha",
   "ha",
   "ma-mk2",
+  "code-s",
+  "code-r",
+  "code-x",
+  "code-kanga",
 ];
 
 export const TAIL_FAMILY_ORDER: TailFamilyId[] = [
@@ -1519,6 +1525,9 @@ export const TAIL_FAMILY_ORDER: TailFamilyId[] = [
   "surf",
   "speed",
   "dart",
+  "code-ar",
+  "code-r-tail",
+  "code-race",
 ];
 
 export const FAMILY_COLOR: Record<FrontFamilyId, string> = {
@@ -1531,6 +1540,11 @@ export const FAMILY_COLOR: Record<FrontFamilyId, string> = {
   uha: "#4cc9f0",
   ha: "#4895ef",
   "ma-mk2": "#3a0ca3",
+  // Code — green shades
+  "code-s": "#52b788",
+  "code-r": "#2d6a4f",
+  "code-x": "#95d5b2",
+  "code-kanga": "#1b4332",
 };
 
 export const FAMILY_LABEL: Record<FrontFamilyId, string> = {
@@ -1541,6 +1555,10 @@ export const FAMILY_LABEL: Record<FrontFamilyId, string> = {
   uha: "Armstrong UHA",
   ha: "Armstrong HA",
   "ma-mk2": "Armstrong MA Mk II",
+  "code-s": "Code S Series",
+  "code-r": "Code R Series",
+  "code-x": "Code X Series",
+  "code-kanga": "Code Kanga",
 };
 
 export const MAST_FAMILY_ORDER: MastFamilyId[] = [
@@ -1558,6 +1576,11 @@ export const MAST_FAMILY_ORDER: MastFamilyId[] = [
   "arm-perf-x",
   "arm-fd-assist",
   "arm-fd-efoil",
+  "code-alloy",
+  "code-hm",
+  "code-uhm-plus",
+  "code-black",
+  "code-fd",
 ];
 
 export const MAST_FAMILY_LABEL: Record<MastFamilyId, string> = {
@@ -1575,4 +1598,9 @@ export const MAST_FAMILY_LABEL: Record<MastFamilyId, string> = {
   "arm-perf-x": "Armstrong Performance-X",
   "arm-fd-assist": "Armstrong Foil Drive Assist",
   "arm-fd-efoil": "Armstrong Foil Drive E-Foil",
+  "code-alloy": "Code Aluminium Mast",
+  "code-hm": "Code Original Mast",
+  "code-uhm-plus": "Code Plus Mast",
+  "code-black": "Code Black Series",
+  "code-fd": "Code Foil Drive Integrated",
 };

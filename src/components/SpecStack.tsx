@@ -25,7 +25,12 @@ function Row({
 }
 
 export function SpecStack({ front, fuse, tail }: Props) {
-  const brandClass = front.brand === "armstrong" ? "part-name arm" : "part-name";
+  const brandClass =
+    front.brand === "armstrong"
+      ? "part-name arm"
+      : front.brand === "code"
+        ? "part-name code"
+        : "part-name";
   return (
     <div className="stack">
       <div className={brandClass}>

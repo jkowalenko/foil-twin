@@ -3,6 +3,8 @@ import type { Source } from "./types";
 export const RETRIEVED = "2026-09-03";
 /** Retrieval date for the v2 mast catalog. */
 export const MAST_RETRIEVED = "2026-09-04";
+/** Retrieval date for the Code Foils catalog (v10). */
+export const CODE_RETRIEVED = "2026-09-08";
 
 export function src(
   url: string,
@@ -21,6 +23,14 @@ export function mastSrc(
   note?: string,
 ): Source {
   return src(url, role, note, MAST_RETRIEVED);
+}
+
+export function codeSrc(
+  url: string,
+  role: Source["role"],
+  note?: string,
+): Source {
+  return src(url, role, note, CODE_RETRIEVED);
 }
 
 export const URLS = {
@@ -93,4 +103,20 @@ export const URLS = {
     "https://axisfoils.com/cdn/shop/files/AXIS_logo_web_400x.png?v=1678316363",
   armstrongWordmark:
     "https://armstrongfoils.com/cdn/shop/files/Armstrong-Wordmark.png?v=1712702441",
+  codeHome: "https://codefoils.com",
+  codeProducts: "https://codefoils.com/products/",
+  codeS: "https://codefoils.com/product/s-series-front-wing/",
+  codeR: "https://codefoils.com/product/r-series-front-wing/",
+  codeX: "https://codefoils.com/product/x-series-front-wing/",
+  codeKanga: "https://codefoils.com/product/kanga-series-front-wing/",
+  codeArTail: "https://codefoils.com/product/ar-series-tail-wings/",
+  codeRTail: "https://codefoils.com/product/r-series-tail-wing/",
+  codeRaceTail: "https://codefoils.com/product/race-tails/",
+  codeFuse: "https://codefoils.com/product/fuselage/",
+  codeHmMast: "https://codefoils.com/product/high-modulus-mast/",
+  codeUhmPlusMast: "https://codefoils.com/product/ultra-high-modulus-plus-mast/",
+  codeBlackMast: "https://codefoils.com/product/black-series-mast/",
+  codeAlloyMast: "https://codefoils.com/product/aluminium-mast/",
+  codeFdMast: "https://codefoils.com/product/code-foils-x-foil-drive-integrated-mast/",
+  codeStore: "https://store.codefoils.com",
 } as const;

@@ -87,16 +87,20 @@ function sizeDistance(from: FrontWing, to: FrontWing): number | null {
 function speedFamilyRank(f: FrontWing): number {
   switch (f.familyId) {
     case "spitfire":
+    case "code-x":
       return 0;
     case "ma-mk2":
       return 1;
     case "surge":
+    case "code-s":
       return 2;
     case "art-v2":
     case "ha":
+    case "code-kanga":
       return 3;
     case "fireball":
     case "uha":
+    case "code-r":
       return 4;
     default:
       return 2;
@@ -259,6 +263,19 @@ function familyShift(front: FrontWing, goal: Goal): FrontFamilyTarget | null {
       "tighter-turns": "ha",
       "more-lift": "ha",
     },
+    "code-x": {
+      "more-speed": "code-s",
+      "more-glide": "code-s",
+    },
+    "code-s": {
+      "more-speed": "code-r",
+      "more-glide": "code-r",
+      "tighter-turns": "code-x",
+    },
+    "code-r": {
+      "tighter-turns": "code-s",
+      "more-lift": "code-s",
+    },
   };
   const id = map[front.familyId]?.[goal];
   if (!id) return null;
@@ -378,6 +395,10 @@ function roleFamily(brand: TailWing["brand"], role: TailRole): TailFamilyId {
     if (role === "speed") return "skinny";
     if (role === "dart") return "progressive";
     return "skinny-surf";
+  }
+  if (brand === "code") {
+    if (role === "speed") return "code-r-tail";
+    return "code-ar";
   }
   if (role === "speed") return "speed";
   if (role === "dart") return "dart";

@@ -6,6 +6,8 @@ import {
   tailById,
 } from "../data/catalog";
 import type {
+  Brand,
+  FrontFamilyId,
   FrontWing,
   Fuselage,
   Mast,
@@ -24,7 +26,7 @@ import {
   spanDeltaWords,
   tailTitle,
 } from "./format";
-import { twinMastFamily } from "./mastFamilies";
+import { twinMastFamilies } from "./mastFamilies";
 
 export type DimScore = {
   key: string;
@@ -295,6 +297,17 @@ function whyFront(a: FrontWing, b: FrontWing): string[] {
   ) {
     bits.push("Surge is Axis's surf-led ~9.5 AR wing — HA is the closest Armstrong outline, MA Mk II is the carve cousin");
   }
+  const pair = (x: FrontFamilyId, y: FrontFamilyId) =>
+    (a.familyId === x && b.familyId === y) || (a.familyId === y && b.familyId === x);
+  if (pair("code-x", "spitfire") || pair("code-x", "ma-mk2")) {
+    bits.push("Code X (AR 8.2) sits with Spitfire / MA Mk II in the carve / mid-aspect lane");
+  }
+  if (pair("code-s", "surge") || pair("code-s", "art-v2") || pair("code-s", "ha")) {
+    bits.push("Code S (AR 9.5) sits with Surge / ART v2 / HA in the mid AR all-round lane");
+  }
+  if (pair("code-r", "fireball") || pair("code-r", "uha")) {
+    bits.push("Code R (AR 13) and Fireball / UHA are the high-AR glide tools in this catalog");
+  }
   return bits;
 }
 
@@ -302,9 +315,9 @@ function whyTail(a: TailWing, b: TailWing): string[] {
   const bits: string[] = [];
   if (a.role === b.role) {
     const map: Record<TailRole, string> = {
-      speed: "same tail job: Skinny ≈ Speed (low-drag, glide, locked yaw)",
+      speed: "same tail job: Skinny ≈ Speed ≈ Code R/Race (low-drag, glide, locked yaw)",
       dart: "same tail job: Progressive ≈ Dart (looser yaw, quicker carve)",
-      surf: "same tail job: Skinny Surf ≈ Surf (yaw control + surf roll)",
+      surf: "same tail job: Skinny Surf ≈ Surf ≈ Code AR (yaw control + surf roll)",
     };
     bits.push(map[a.role]);
   } else {
@@ -352,11 +365,12 @@ export function resolveSetup(s: Setup): {
 export function rankTwins(
   from: Setup,
   limit = 8,
-  opts?: { minFrontScore?: number },
+  opts?: { minFrontScore?: number; targetBrand?: Brand },
 ): TwinMatch[] {
   const src = resolveSetup(from);
   if (!src) return [];
-  const brand = otherBrand(from.brand);
+  const brand = opts?.targetBrand ?? otherBrand(from.brand);
+  if (brand === from.brand) return [];
   const fronts = catalog.fronts.filter((f) => f.brand === brand);
   const fuses = catalog.fuselages.filter((f) => f.brand === brand);
   const tails = catalog.tails.filter((t) => t.brand === brand);
@@ -406,9 +420,12 @@ export function rankTwins(
 export function rankFrontTwins(
   from: FrontWing,
   limit = 6,
-  opts?: { sameArClass?: boolean; minScore?: number },
+  opts?: { sameArClass?: boolean; minScore?: number; targetBrand?: Brand },
 ): FrontTwin[] {
-  const others = catalog.fronts.filter((f) => f.brand !== from.brand);
+  if (opts?.targetBrand === from.brand) return [];
+  const others = catalog.fronts.filter((f) =>
+    opts?.targetBrand ? f.brand === opts.targetBrand : f.brand !== from.brand,
+  );
   const ranked: FrontTwin[] = [];
   for (const f of others) {
     if (opts?.sameArClass && !sameArClass(from, f)) continue;
@@ -426,8 +443,14 @@ export function rankFrontTwins(
   return ranked.slice(0, limit);
 }
 
-export function rankTailTwins(from: TailWing, limit = 4): PartTwin<TailWing>[] {
-  const others = catalog.tails.filter((t) => t.brand !== from.brand);
+export function rankTailTwins(
+  from: TailWing,
+  limit = 4,
+  opts?: { targetBrand?: Brand },
+): PartTwin<TailWing>[] {
+  const others = catalog.tails.filter((t) =>
+    opts?.targetBrand ? t.brand === opts.targetBrand : t.brand !== from.brand,
+  );
   const ranked: PartTwin<TailWing>[] = [];
   for (const t of others) {
     const s = scoreTailPair(from, t);
@@ -443,8 +466,14 @@ export function rankTailTwins(from: TailWing, limit = 4): PartTwin<TailWing>[] {
   return ranked.slice(0, limit);
 }
 
-export function rankFuseTwins(from: Fuselage, limit = 3): PartTwin<Fuselage>[] {
-  const others = catalog.fuselages.filter((f) => f.brand !== from.brand);
+export function rankFuseTwins(
+  from: Fuselage,
+  limit = 3,
+  opts?: { targetBrand?: Brand },
+): PartTwin<Fuselage>[] {
+  const others = catalog.fuselages.filter((f) =>
+    opts?.targetBrand ? f.brand === opts.targetBrand : f.brand !== from.brand,
+  );
   const ranked: PartTwin<Fuselage>[] = [];
   for (const f of others) {
     const s = scoreFusePair(from, f);
@@ -464,7 +493,7 @@ function whyMast(a: Mast, b: Mast): string[] {
   const bits: string[] = [];
   const len = mastDeltaWords(a.length_mm, b.length_mm);
   if (len) bits.push(len);
-  if (twinMastFamily(a.familyId) === b.familyId) {
+  if (twinMastFamilies(a.familyId, b.brand).includes(b.familyId)) {
     bits.push("same mast class (family twin)");
   }
   const ba = mastMaterialBucket(a);
@@ -489,10 +518,16 @@ function whyMast(a: Mast, b: Mast): string[] {
   return bits;
 }
 
-export function rankMastTwins(from: Mast, limit = 4): PartTwin<Mast>[] {
-  const twinFamily = twinMastFamily(from.familyId);
-  const others = catalog.masts.filter((m) => m.brand !== from.brand);
-  const inFamily = others.filter((m) => m.familyId === twinFamily);
+export function rankMastTwins(
+  from: Mast,
+  limit = 4,
+  opts?: { targetBrand?: Brand },
+): PartTwin<Mast>[] {
+  const brand = opts?.targetBrand ?? otherBrand(from.brand);
+  if (brand === from.brand) return [];
+  const families = twinMastFamilies(from.familyId, brand);
+  const others = catalog.masts.filter((m) => m.brand === brand);
+  const inFamily = others.filter((m) => families.includes(m.familyId));
   const pool =
     inFamily.length > 0
       ? inFamily
@@ -530,28 +565,28 @@ export function groupTwinsByFront(matches: TwinMatch[]): TwinGroup[] {
   return groups;
 }
 
-export function nearestFront(fromId: string): FrontWing | null {
+export function nearestFront(fromId: string, targetBrand?: Brand): FrontWing | null {
   const f = frontById(fromId);
   if (!f) return null;
-  return rankFrontTwins(f, 1)[0]?.front ?? null;
+  return rankFrontTwins(f, 1, targetBrand ? { targetBrand } : undefined)[0]?.front ?? null;
 }
 
-export function nearestTail(fromId: string): TailWing | null {
+export function nearestTail(fromId: string, targetBrand?: Brand): TailWing | null {
   const t = tailById(fromId);
   if (!t) return null;
-  return rankTailTwins(t, 1)[0]?.part ?? null;
+  return rankTailTwins(t, 1, targetBrand ? { targetBrand } : undefined)[0]?.part ?? null;
 }
 
-export function nearestFuse(fromId: string): Fuselage | null {
+export function nearestFuse(fromId: string, targetBrand?: Brand): Fuselage | null {
   const f = fuseById(fromId);
   if (!f) return null;
-  return rankFuseTwins(f, 1)[0]?.part ?? null;
+  return rankFuseTwins(f, 1, targetBrand ? { targetBrand } : undefined)[0]?.part ?? null;
 }
 
-export function nearestMast(fromId: string): Mast | null {
+export function nearestMast(fromId: string, targetBrand?: Brand): Mast | null {
   const m = mastById(fromId);
   if (!m) return null;
-  return rankMastTwins(m, 1)[0]?.part ?? null;
+  return rankMastTwins(m, 1, targetBrand ? { targetBrand } : undefined)[0]?.part ?? null;
 }
 
 export function describeTwin(m: TwinMatch): string {

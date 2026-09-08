@@ -6,8 +6,8 @@ import {
   catalog,
   frontById,
 } from "../data/catalog";
-import type { FrontFamilyId, FrontWing } from "../data/types";
-import { n, shortFront } from "../lib/format";
+import { BRANDS, type FrontFamilyId, type FrontWing } from "../data/types";
+import { brandName, n, shortFront } from "../lib/format";
 import { MIN_MAP_FRONT, arClass, rankFrontTwins } from "../lib/match";
 import { BrandMark } from "./BrandMark";
 
@@ -71,12 +71,8 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
   const families = FRONT_FAMILY_ORDER.filter((id) =>
     catalog.fronts.some((f) => f.familyId === id),
   );
-  const axisFamilies = families.filter((id) =>
-    id === "surge" || id === "art-v2" || id === "spitfire" || id === "fireball",
-  );
-  const armFamilies = families.filter(
-    (id) => id === "uha" || id === "ha" || id === "ma-mk2",
-  );
+  const familiesFor = (brand: FrontWing["brand"]) =>
+    families.filter((id) => catalog.fronts.some((f) => f.familyId === id && f.brand === brand));
   const toggleFamily = (id: FrontFamilyId) => {
     const next = new Set(hidden);
     if (next.has(id)) next.delete(id);
@@ -84,7 +80,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
     setHidden(next);
   };
 
-  const ticksX = [500, 700, 900, 1100, 1400];
+  const ticksX = [500, 700, 900, 1100, 1400, 1800, 2200];
   const ticksY =
     yMode === "ar" ? [6, 8, 10, 12, 14, 17, 20] : [600, 800, 1000, 1200, 1500, 1750];
 
@@ -109,7 +105,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                 </option>
                 {pickerFronts.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.brand === "axis" ? "Axis" : "Armstrong"} {f.familyOfficial} {f.sizeLabel}
+                    {brandName(f.brand)} {f.familyOfficial} {f.sizeLabel}
                   </option>
                 ))}
               </select>
@@ -293,7 +289,9 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
                   stroke={
                     p.brand === "axis"
                       ? "rgba(230,57,70,0.9)"
-                      : "rgba(76,201,240,0.9)"
+                      : p.brand === "armstrong"
+                        ? "rgba(76,201,240,0.9)"
+                        : "rgba(82,183,136,0.9)"
                   }
                   strokeWidth={isSel ? 2 : 1}
                   opacity={isSel || isTwin || !selected ? 1 : 0.35}
@@ -333,38 +331,27 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
           </div>
         )}
         <div className="legend">
-          <div className="legend-row">
-            <BrandMark brand="axis" size="sm" />
-            {axisFamilies.map((id) => (
-              <span
-                key={id}
-                onClick={() => toggleFamily(id)}
-                style={{
-                  cursor: "pointer",
-                  opacity: hidden.has(id) ? 0.35 : 1,
-                }}
-              >
-                <i style={{ background: FAMILY_COLOR[id] }} />
-                {FAMILY_LABEL[id].replace(/^Axis\s+/, "")}
-              </span>
-            ))}
-          </div>
-          <div className="legend-row">
-            <BrandMark brand="armstrong" size="sm" />
-            {armFamilies.map((id) => (
-              <span
-                key={id}
-                onClick={() => toggleFamily(id)}
-                style={{
-                  cursor: "pointer",
-                  opacity: hidden.has(id) ? 0.35 : 1,
-                }}
-              >
-                <i style={{ background: FAMILY_COLOR[id] }} />
-                {FAMILY_LABEL[id].replace(/^Armstrong\s+/, "")}
-              </span>
-            ))}
-          </div>
+          {BRANDS.map((brand) => (
+            <div key={brand} className="legend-row">
+              <BrandMark brand={brand} size="sm" />
+              {familiesFor(brand).map((id) => (
+                <span
+                  key={id}
+                  onClick={() => toggleFamily(id)}
+                  style={{
+                    cursor: "pointer",
+                    opacity: hidden.has(id) ? 0.35 : 1,
+                  }}
+                >
+                  <i style={{ background: FAMILY_COLOR[id] }} />
+                  {FAMILY_LABEL[id]
+                    .replace(/^Axis\s+/, "")
+                    .replace(/^Armstrong\s+/, "")
+                    .replace(/^Code\s+/, "")}
+                </span>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -380,7 +367,7 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
         </div>
         <div className="panel-b compare-front">
           {!selected && (
-            <p className="note">Click a wing on the map. Axis is red-ringed, Armstrong blue.</p>
+            <p className="note">Click a wing on the map. Axis is red-ringed, Armstrong blue, Code green.</p>
           )}
           {selected && (
             <>

@@ -1,0 +1,39 @@
+I'll start by mapping the current catalog, brand types, and Twin/Map/Quiver flows so Code can be added without inventing specs.I'll read the V10 prompt and current types, catalog, matching, and UI so the Code work stays consistent.Next I’ll read family orders, sanity checks, and the Twin/Map/Quiver UI so the three-brand work matches existing patterns.I’ll pull official Code product pages so catalog notes stay sourced, then start wiring the three-brand types and matching.I'll start with types, sources, and the Code catalog, then wire matching and UI.Code is in as a third brand on `main`. `npm run build` and `npm run sanity` both pass. Nothing was committed.
+
+### Catalog (official codefoils.com, 2026-09-08)
+**Fronts (27):** S Series 9 (AR 9.5) · R Series 7 (AR 13.0) · X Series 7 (AR 8.2) · Kanga 4. Chord/weight/volume are `null`.
+
+**Tails (12):** AR Series 6 (surf, AR 8.64) · R Series Tail 4 (speed, AR 10.8) · Race 100 / Race 119 (speed).
+
+**Fuselages (5):** 2XS 420 → Large 540 mm, official “length from front of mast”, `familyOfficial`: Code Fuselage.
+
+**Masts (14):** Original HM 75/80/85 · Plus 75/80/85/95 · Black 75/80/85 (13.6 / 14.0 / 14.2 mm) · Alloy 75/80 (18.7 mm, chord 120) · FD 780 mm with 11 cm and 17 cm pods (`motorIntegrated`).
+
+Required ids are present (`code-s-850`, `code-r-860`, `code-x-810`, `code-kanga-1600`, `code-ar-158`, `code-rtail-120`, `code-race-100`, `code-fuse-xs`, `code-hm-800`, `code-uhm-plus-850`, `code-black-800`, `code-alloy-750`, `code-fd-780-11`, `code-fd-780-17`).
+
+### Unpriced
+All **58** Code SKUs are `null`. codefoils.com does not sell foil parts online in USD (apparel AU-only). Axis/Armstrong USD list prices and BoC FXUSDCAD **1.3840** (2026-09-04) are unchanged. UI shows an em-dash.
+
+### Twin UX
+Ride brand is three logos; target brand is the other two (cannot match). Title is `{Target} twin setups`. `rankTwins(from, limit, { minFrontScore, targetBrand? })`. Floor still **75**; weights **62 / 23 / 15**.
+
+Sample: ART v2 879 → Code **850S / Large / 135R** (79%). 850S → Axis Surge 890 (90%) and Armstrong HA 880 (92%).
+
+### Map / Progress / Quiver
+Map plots Code fronts with **3 legend rows** and Code greens `#52b788` / `#2d6a4f` / `#95d5b2` / `#1b4332`. Progress familyShift is X→S→R (speed/glide) and R→S→X (carve); Kanga stays same-family size steps. Quiver pickers are 3 logos; Brand convert target is selectable; `majorityBrand` is 3-way; `brandConvert(doc, include?, toBrand?)`. Header has three marks; footer links codefoils.com.
+
+### Mast map
+| Class | Axis | Armstrong | Code |
+| --- | --- | --- | --- |
+| alloy | al-19 | alloy | alloy |
+| entry-carbon | PC (+Fatty) | Carbon Mk II | Original HM |
+| HM/Perf | PC-HM | Perf Mk II | Original HM |
+| UHM/Pro | PRO (+Kaiwi) | Perf-X | Plus (+Black) |
+| FD | FD-* | FD-* | FD |
+
+`nearestMast` picks nearest length in that class for the chosen target. Axis↔Armstrong primaries are unchanged.
+
+### Caveats
+Code fuse length is “from front of mast”, not a 1:1 overall-length twin of Axis Advance+ / Armstrong TC. No Code specs or prices were invented. Quiver storage key is still `foil-twin-quiver-v1`. 80/90 kits were not weakened.
+
+No browser tools here, so layout/theme wordmarks were not clicked in a live window; checks were `tsc` + Vite build + sanity (catalog, Twin `targetBrand`, map colors, mast map, convert kits including Code).

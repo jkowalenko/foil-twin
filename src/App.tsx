@@ -93,6 +93,8 @@ export default function App() {
             <BrandMark brand="axis" size="sm" />
             <span className="tag">↔</span>
             <BrandMark brand="armstrong" size="sm" />
+            <span className="tag">↔</span>
+            <BrandMark brand="code" size="sm" />
             <span className="tag">setup matcher</span>
           </div>
         </div>
@@ -160,8 +162,8 @@ export default function App() {
 
       <footer className="disclaimer">
         <span>
-          Specs from Axis and Armstrong product pages. Wings/fuses {catalog.retrieved}; masts{" "}
-          {catalog.mastRetrieved}.
+          Specs from Axis, Armstrong, and Code product pages. Axis/Armstrong wings/fuses{" "}
+          {catalog.retrieved}; masts {catalog.mastRetrieved}; Code {catalog.codeRetrieved}.
           Feel still varies by mast, board, rider weight, and conditions. Null
           numbers are unpublished — matching skips them instead of guessing.
         </span>
@@ -172,6 +174,10 @@ export default function App() {
           {" · "}
           <a href="https://www.armstrongfoils.com" target="_blank" rel="noreferrer">
             armstrongfoils.com
+          </a>
+          {" · "}
+          <a href="https://codefoils.com" target="_blank" rel="noreferrer">
+            codefoils.com
           </a>
         </span>
       </footer>

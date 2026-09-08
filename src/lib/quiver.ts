@@ -30,7 +30,7 @@ import {
   type TwinMatch,
 } from "./match";
 import { longerFuse, nextSetups, shorterFuse, type NextSetup } from "./progression";
-import { twinMastFamily } from "./mastFamilies";
+import { twinMastFamilies } from "./mastFamilies";
 
 export const EMPTY_QUIVER: QuiverDoc = {
   version: 1,
@@ -102,11 +102,9 @@ export function toggleId(list: string[], id: string): string[] {
 }
 
 export function majorityBrand(doc: QuiverDoc): Brand {
-  let axis = 0;
-  let arm = 0;
+  const counts: Record<Brand, number> = { axis: 0, armstrong: 0, code: 0 };
   const count = (brand: Brand) => {
-    if (brand === "axis") axis += 1;
-    else arm += 1;
+    counts[brand] += 1;
   };
   for (const id of doc.parts.frontIds) {
     const p = frontById(id);
@@ -124,16 +122,28 @@ export function majorityBrand(doc: QuiverDoc): Brand {
     const p = tailById(id);
     if (p) count(p.brand);
   }
-  if (arm > axis) return "armstrong";
-  return "axis";
+  let best: Brand = "axis";
+  let n = counts.axis;
+  if (counts.armstrong > n) {
+    best = "armstrong";
+    n = counts.armstrong;
+  }
+  if (counts.code > n) {
+    best = "code";
+  }
+  return best;
 }
 
 type Lane = "carve" | "surf" | "allround" | "glide";
 
 function frontLane(f: FrontWing): Lane {
-  if (f.familyId === "spitfire" || f.familyId === "ma-mk2") return "carve";
-  if (f.familyId === "surge") return "surf";
-  if (f.familyId === "fireball" || f.familyId === "uha") return "glide";
+  if (f.familyId === "spitfire" || f.familyId === "ma-mk2" || f.familyId === "code-x") {
+    return "carve";
+  }
+  if (f.familyId === "surge" || f.familyId === "code-s") return "surf";
+  if (f.familyId === "fireball" || f.familyId === "uha" || f.familyId === "code-r") {
+    return "glide";
+  }
   return "allround";
 }
 
@@ -893,9 +903,9 @@ function inferSeedSetup(doc: QuiverDoc, brand: Brand): Setup | null {
   return { brand: seedFront.brand, frontId: seedFront.id, fuseId: fuse.id, tailId: tail.id };
 }
 
-function bestConvertTwin(seed: Setup, doc: QuiverDoc): TwinMatch | null {
+function bestConvertTwin(seed: Setup, doc: QuiverDoc, to: Brand): TwinMatch | null {
   const src = resolveSetup(seed);
-  const twins = rankTwins(seed, 8);
+  const twins = rankTwins(seed, 8, { targetBrand: to });
   const best = twins[0];
   if (!best) return null;
   if (!src || twins.length < 2) return best;
@@ -1044,7 +1054,7 @@ function pickCompleteKit(args: {
 }): { kit: ConvertBuyItem[]; next: NextSetup[] } {
   const { doc, from, to, buyList, checked } = args;
   const seed = inferSeedSetup(doc, from);
-  const twin = seed ? bestConvertTwin(seed, doc) : null;
+  const twin = seed ? bestConvertTwin(seed, doc, to) : null;
   const disc = preferredDiscipline(doc, twin?.front);
   const next = twin
     ? nextSetups(twin.setup, doc.level ?? "comfortable", disc, doc.goal ?? "more-speed")
@@ -1094,15 +1104,15 @@ function pickCompleteKit(args: {
     (a, b) => (b.length_mm ?? 0) - (a.length_mm ?? 0),
   )[0];
   if (srcMast) {
-    const mt = nearestMast(srcMast.id);
+    const mt = nearestMast(srcMast.id, to);
     if (mt && !mt.motorIntegrated) mastCands.push({ id: mt.id, source: "twin" });
     if (srcMast.length_mm != null) {
-      const twinFam = twinMastFamily(srcMast.familyId);
+      const twinFams = twinMastFamilies(srcMast.familyId, to);
       const pool = catalog.masts.filter(
         (m) =>
           m.brand === to &&
           !m.motorIntegrated &&
-          m.familyId === twinFam &&
+          twinFams.includes(m.familyId) &&
           (m.length_mm ?? 0) >= band.min,
       );
       const near = [...pool].sort(
@@ -1311,9 +1321,13 @@ function buildRangeSummaries(
   return out;
 }
 
-export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandConvert | null {
+export function brandConvert(
+  doc: QuiverDoc,
+  include?: ConvertInclude,
+  toBrand?: Brand,
+): BrandConvert | null {
   const from = majorityBrand(doc);
-  const to = otherBrand(from);
+  const to = toBrand && toBrand !== from ? toBrand : otherBrand(from);
   const anyOwned =
     doc.parts.frontIds.length +
       doc.parts.tailIds.length +
@@ -1336,7 +1350,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   for (const id of frontIds) {
     const p = frontById(id);
     if (!p) continue;
-    const twins = rankFrontTwins(p, 24);
+    const twins = rankFrontTwins(p, 24, { targetBrand: to });
     const nearest = twins[0];
     frontHits.set(
       id,
@@ -1359,7 +1373,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   for (const id of tailIds) {
     const p = tailById(id);
     if (!p) continue;
-    const t = nearestTail(id);
+    const t = nearestTail(id, to);
     rows.push({
       kind: "tail",
       ownedId: id,
@@ -1375,7 +1389,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   for (const id of fuseIds) {
     const p = fuseById(id);
     if (!p) continue;
-    const t = nearestFuse(id);
+    const t = nearestFuse(id, to);
     rows.push({
       kind: "fuse",
       ownedId: id,
@@ -1391,7 +1405,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   for (const id of mastIds) {
     const p = mastById(id);
     if (!p) continue;
-    const t = nearestMast(id);
+    const t = nearestMast(id, to);
     rows.push({
       kind: "mast",
       ownedId: id,
@@ -1555,7 +1569,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   const seed = inferSetup(doc, from);
   if (seed) {
     const src = resolveSetup(seed);
-    const twin = bestConvertTwin(seed, doc);
+    const twin = bestConvertTwin(seed, doc, to);
     if (twin) {
       const pathWhy = twin.why.slice(0, 3);
       if (src && convertFrontPenalty(src.front, twin.front, doc.goal, doc.disciplines) > 0) {
@@ -1587,7 +1601,7 @@ export function brandConvert(doc: QuiverDoc, include?: ConvertInclude): BrandCon
   } else if (ownedCounts.fronts) {
     const firstId = frontIds[0];
     const first = firstId ? frontById(firstId) : undefined;
-    const t = first ? nearestFront(first.id) : null;
+    const t = first ? nearestFront(first.id, to) : null;
     if (first && t) {
       path.push({
         headline: `Start the other-brand path at ${t.familyOfficial} ${t.sizeLabel}`,

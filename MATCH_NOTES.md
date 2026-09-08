@@ -75,6 +75,11 @@ Kept the requested map:
 
 - Skinny ≈ Speed (low drag, glide, ART PRO / Fireball pairing language)
 - Progressive ≈ Dart (turning, looser, carve)
-- Skinny Surf ≈ Surf Mk II (surf / yaw / roll)
+- Skinny Surf ≈ Surf Mk II ≈ Code AR (surf / yaw / roll)
+- Code R tail / Race ≈ Speed / Skinny (glide, locked yaw)
+
+Code front lanes (published AR, not invented feel): X (8.2) with Spitfire / MA Mk II; S (9.5) with Surge / ART v2 / HA; R (13) with Fireball / UHA. Kanga is a pump family — Progress stays on same-family size steps.
+
+Twin can target a chosen other brand (`targetBrand`). Default remains Axis ↔ Armstrong; Code defaults to Axis.
 
 Armstrong also says some UHA riders use the **Surf** stabilizer for a tighter radius, so a Fireball/UHA rider on a Surf tail is a real-world mix, not a matcher bug. Role is a bonus, not a hard filter.
