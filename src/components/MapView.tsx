@@ -333,38 +333,38 @@ export function MapView({ selectedId, onSelect, onUseFront }: Props) {
           </div>
         )}
         <div className="legend">
-          <span className="legend-brands">
+          <div className="legend-row">
             <BrandMark brand="axis" size="sm" />
+            {axisFamilies.map((id) => (
+              <span
+                key={id}
+                onClick={() => toggleFamily(id)}
+                style={{
+                  cursor: "pointer",
+                  opacity: hidden.has(id) ? 0.35 : 1,
+                }}
+              >
+                <i style={{ background: FAMILY_COLOR[id] }} />
+                {FAMILY_LABEL[id].replace(/^Axis\s+/, "")}
+              </span>
+            ))}
+          </div>
+          <div className="legend-row">
             <BrandMark brand="armstrong" size="sm" />
-          </span>
-          <span className="legend-group">Axis</span>
-          {axisFamilies.map((id) => (
-            <span
-              key={id}
-              onClick={() => toggleFamily(id)}
-              style={{
-                cursor: "pointer",
-                opacity: hidden.has(id) ? 0.35 : 1,
-              }}
-            >
-              <i style={{ background: FAMILY_COLOR[id] }} />
-              {FAMILY_LABEL[id]}
-            </span>
-          ))}
-          <span className="legend-group">Armstrong</span>
-          {armFamilies.map((id) => (
-            <span
-              key={id}
-              onClick={() => toggleFamily(id)}
-              style={{
-                cursor: "pointer",
-                opacity: hidden.has(id) ? 0.35 : 1,
-              }}
-            >
-              <i style={{ background: FAMILY_COLOR[id] }} />
-              {FAMILY_LABEL[id]}
-            </span>
-          ))}
+            {armFamilies.map((id) => (
+              <span
+                key={id}
+                onClick={() => toggleFamily(id)}
+                style={{
+                  cursor: "pointer",
+                  opacity: hidden.has(id) ? 0.35 : 1,
+                }}
+              >
+                <i style={{ background: FAMILY_COLOR[id] }} />
+                {FAMILY_LABEL[id].replace(/^Armstrong\s+/, "")}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
