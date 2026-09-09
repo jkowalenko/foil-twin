@@ -398,7 +398,7 @@ export function QuiverView({ onAdopt }: Props) {
           id="overlaps"
           label="Overlaps"
           title="Overlaps"
-          sub="Same-job parts you could sell or drop for these goals"
+          sub="Same-job parts you could sell, plus suggested trades for these goals"
           open={ui.sections.overlaps}
           onToggle={() => toggleSection("overlaps")}
         >
@@ -409,30 +409,59 @@ export function QuiverView({ onAdopt }: Props) {
           )}
           {overlapClusters.map((c) => (
             <div
-              key={`${c.label}-${c.keep.map((k) => k.partId).join("-")}-${c.sell.map((s) => s.partId).join("-")}`}
+              key={`${c.label}-${c.keep.map((k) => k.partId).join("-")}-${c.sell.map((s) => s.partId).join("-")}-${c.tweaks.map((t) => t.fromPartId).join("-")}`}
               className="gap-block overlap-cluster"
             >
               <h3>{c.label}</h3>
               {c.keep.length > 0 && (
-                <p className="note ok-note">
-                  Keep {c.keep.map((k) => k.title).join(" · ")}
-                </p>
+                <ul className="overlap-keep">
+                  {c.keep.map((k) => (
+                    <li key={k.partId}>
+                      <span className="keep-tag">keep</span>
+                      <strong>{k.title}</strong>
+                      {k.note ? <span className="overlap-keep-note"> — {k.note}</span> : null}
+                    </li>
+                  ))}
+                </ul>
               )}
-              <div className="overlap-list">
-                {c.sell.map((s) => (
-                  <div key={s.partId} className="overlap-card">
-                    <div className="twin-top">
-                      <strong>
-                        <span className="sell-tag">sell</span>
-                        {s.title}
-                      </strong>
+              {c.sell.length > 0 && (
+                <div className="overlap-list">
+                  {c.sell.map((s) => (
+                    <div key={s.partId} className="overlap-card">
+                      <div className="twin-top">
+                        <strong>
+                          <span className="sell-tag">sell</span>
+                          {s.title}
+                        </strong>
+                      </div>
+                      <p className="note" style={{ marginTop: 6 }}>
+                        {s.reason}
+                      </p>
                     </div>
-                    <p className="note" style={{ marginTop: 6 }}>
-                      {s.reason}
-                    </p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
+              {c.tweaks.length > 0 && (
+                <div className="overlap-list overlap-tweaks">
+                  {c.tweaks.map((t) => (
+                    <div
+                      key={`${t.fromPartId}-${t.towardPartId ?? t.suggestion}`}
+                      className="overlap-card tweak-card"
+                    >
+                      <div className="twin-top">
+                        <strong>
+                          <span className="trade-tag">trade</span>
+                          {t.fromTitle}
+                          {t.towardTitle ? ` → ${t.towardTitle}` : ""}
+                        </strong>
+                      </div>
+                      <p className="note" style={{ marginTop: 6 }}>
+                        {t.suggestion}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </CollapsiblePanel>

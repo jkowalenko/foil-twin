@@ -987,11 +987,25 @@ section("Quiver overlaps sell/drop");
 const jargon = /greedy|set-cover|heuristic|lane|AR class|WANT_LANES/i;
 function assertOverlapCopy(label: string, clusters: ReturnType<typeof analyzeOverlaps>) {
   const blob = clusters
-    .flatMap((c) => [c.label, ...c.keep.map((k) => k.title), ...c.sell.map((s) => `${s.title} ${s.reason}`)])
+    .flatMap((c) => [
+      c.label,
+      ...c.keep.map((k) => `${k.title} ${k.note ?? ""}`),
+      ...c.sell.map((s) => `${s.title} ${s.reason}`),
+      ...c.tweaks.map((t) => `${t.fromTitle} ${t.suggestion} ${t.towardTitle ?? ""}`),
+    ])
     .join("\n");
   if (jargon.test(blob)) {
     throw new Error(`${label}: overlap copy has heuristic jargon:\n${blob}`);
   }
+}
+
+function frontGapCount(doc: QuiverDoc): number {
+  return analyzeGaps(doc).filter((g) => g.missing.some((m) => /front/i.test(m))).length;
+}
+
+function disciplineFrontGapped(doc: QuiverDoc, disc: QuiverDoc["disciplines"][number]): boolean {
+  const g = analyzeGaps(doc).find((row) => row.discipline === disc);
+  return !!g?.missing.some((m) => /front/i.test(m));
 }
 
 const speedOverlap = analyzeOverlaps(
@@ -1093,8 +1107,88 @@ if (leanLanes.length) {
 if (jargon.test(JSON.stringify(leanLanes))) {
   throw new Error("lean overlap payload still has jargon");
 }
+
+const artSurgeDoc = quiverDoc({
+  disciplines: ["wing", "wake"],
+  goal: "more-speed",
+  parts: {
+    mastIds: [],
+    fuseIds: [],
+    frontIds: ["axis-artv2-939", "axis-artv2-999", "axis-surge-1080", "axis-surge-950"],
+    tailIds: [],
+  },
+});
+const artSurge = analyzeOverlaps(artSurgeDoc);
+assertOverlapCopy("ART+Surge wing/wake", artSurge);
+const artSurgeSells = artSurge.flatMap((c) => c.sell);
+const artSurgeKeeps = artSurge.flatMap((c) => c.keep);
+const artSurgeTweaks = artSurge.flatMap((c) => c.tweaks);
+const artSurgeSellIds = artSurgeSells.filter((s) => s.kind === "front").map((s) => s.partId);
+const soldBothSurges =
+  artSurgeSellIds.includes("axis-surge-1080") && artSurgeSellIds.includes("axis-surge-950");
+if (soldBothSurges) {
+  throw new Error("must not sell both Surge 1080 and 950 — wake would lose its surf/wake fronts");
+}
+if (artSurgeSellIds.includes("axis-surge-1080")) {
+  throw new Error("Surge 1080 is a size step, not a true duplicate — do not sell it");
+}
+if (!artSurgeKeeps.some((k) => k.partId === "axis-surge-950")) {
+  throw new Error(
+    `expected to keep Surge 950 for wake, got keeps ${artSurgeKeeps.map((k) => k.partId).join(", ") || "(none)"}`,
+  );
+}
+if (!artSurgeKeeps.some((k) => k.partId === "axis-artv2-939")) {
+  throw new Error(
+    `expected to keep ART v2 939 for wing, got keeps ${artSurgeKeeps.map((k) => k.partId).join(", ") || "(none)"}`,
+  );
+}
+if (artSurgeTweaks.some((t) => t.fromPartId === "axis-surge-950")) {
+  throw new Error("do not trade away Surge 950 while it is the wake coverage keep");
+}
+const keptArt = artSurgeKeeps.some((k) => k.partId === "axis-artv2-939" || k.partId === "axis-artv2-999");
+const soldAllArt =
+  artSurgeSellIds.includes("axis-artv2-939") && artSurgeSellIds.includes("axis-artv2-999");
+if (soldAllArt && !keptArt) {
+  throw new Error("do not sell both ART v2 sizes when they still cover different wing work");
+}
+const afterSells = quiverDoc({
+  ...artSurgeDoc,
+  parts: {
+    ...artSurgeDoc.parts,
+    frontIds: artSurgeDoc.parts.frontIds.filter((id) => !artSurgeSellIds.includes(id)),
+  },
+});
+if (frontGapCount(afterSells) > frontGapCount(artSurgeDoc)) {
+  throw new Error(
+    `selling ${artSurgeSellIds.join(", ") || "(none)"} opened a front gap (before ${frontGapCount(artSurgeDoc)}, after ${frontGapCount(afterSells)})`,
+  );
+}
+if (disciplineFrontGapped(afterSells, "wake") && !disciplineFrontGapped(artSurgeDoc, "wake")) {
+  throw new Error("selling overlap fronts opened a wake front gap");
+}
+if (disciplineFrontGapped(afterSells, "wing") && !disciplineFrontGapped(artSurgeDoc, "wing")) {
+  throw new Error("selling overlap fronts opened a wing front gap");
+}
+if (!artSurgeTweaks.length) {
+  throw new Error(
+    `ART+Surge wing/wake sizes bunch — expected at least one trade tweak, got ${JSON.stringify(artSurge)}`,
+  );
+}
+if (!artSurgeTweaks.some((t) => t.fromPartId === "axis-surge-1080" && t.towardPartId)) {
+  throw new Error(
+    `expected a trade path off Surge 1080 toward a clearer size, got ${JSON.stringify(artSurgeTweaks)}`,
+  );
+}
+for (const s of artSurgeSells) {
+  if (!s.keepTitle && !s.keepId) {
+    throw new Error(`sell ${s.partId} missing keep pointer`);
+  }
+  if (!/wing|wake|more speed/i.test(s.reason)) {
+    throw new Error(`sell reason should name discipline or goal, got: ${s.reason}`);
+  }
+}
 console.log(
-  `overlaps: sell ${sell980.partId} keep ${sell980.keepId}; ART sell ${artSells.map((s) => s.partId).join(",")}; lean empty`,
+  `overlaps: sell ${sell980.partId} keep ${sell980.keepId}; ART sell ${artSells.map((s) => s.partId).join(",")}; ART+Surge sells ${artSurgeSellIds.join(",") || "(none)"} tweaks ${artSurgeTweaks.length}; lean empty`,
 );
 
 section("Mast family twin map");

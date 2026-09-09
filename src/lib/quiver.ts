@@ -9,6 +9,7 @@ import { QUIVER_STORAGE_KEY } from "../data/labels";
 import type {
   Brand,
   Discipline,
+  FrontFamilyId,
   FrontWing,
   Fuselage,
   Goal,
@@ -248,16 +249,55 @@ export type QuiverOverlapSell = {
   keepTitle: string;
 };
 
-export type QuiverOverlapCluster = {
-  label: string;
-  keep: { partId: string; title: string }[];
-  sell: QuiverOverlapSell[];
+export type QuiverOverlapTweak = {
+  fromPartId: string;
+  fromTitle: string;
+  kind: "front" | "tail" | "fuse";
+  suggestion: string;
+  towardPartId?: string;
+  towardTitle?: string;
 };
 
-/** Published areas within ~20% (log-relative) count as the same size job. */
+export type QuiverOverlapCluster = {
+  label: string;
+  keep: { partId: string; title: string; note?: string }[];
+  sell: QuiverOverlapSell[];
+  tweaks: QuiverOverlapTweak[];
+};
+
+/** Published areas within ~20% count as similar enough to cluster. */
 const AREA_OVERLAP_RATIO = 1.2;
-/** Farther than this, two fronts in one family can both be kept. */
-const AREA_DISTINCT_RATIO = 1.25;
+/** Span within ~20% for cross-family clustering when both are published. */
+const SPAN_OVERLAP_RATIO = 1.2;
+/** Same-job pair this close is always extra, even with no goal. */
+const AREA_TIGHT_DUP_RATIO = 1.1;
+/** Same-job pair this close is extra when the worse one retreats from the goal. */
+const AREA_GOAL_DUP_RATIO = 1.18;
+/** Kept pair this close can get a trade suggestion to spread sizes. */
+const AREA_BUNCH_RATIO = 1.22;
+
+/**
+ * Catalog recency per family. Higher is newer.
+ * Axis HA is an older all-round; Armstrong HA / Code lines are current.
+ */
+const FAMILY_GENERATION: Record<FrontFamilyId, number> = {
+  "art-v2": 4,
+  surge: 4,
+  spitfire: 4,
+  fireball: 4,
+  uha: 2,
+  ha: 1,
+  "ma-mk2": 3,
+  "code-s": 4,
+  "code-r": 4,
+  "code-x": 4,
+  "code-kanga": 4,
+};
+
+function familyGeneration(f: FrontWing): number {
+  if (f.brand === "armstrong" || f.brand === "code") return 4;
+  return FAMILY_GENERATION[f.familyId] ?? 3;
+}
 
 function areaRatio(a: number | null | undefined, b: number | null | undefined): number | null {
   if (a == null || b == null || a <= 0 || b <= 0) return null;
@@ -269,9 +309,9 @@ function areasOverlap(a: number | null | undefined, b: number | null | undefined
   return r != null && r <= AREA_OVERLAP_RATIO;
 }
 
-function areasDistinct(a: number | null | undefined, b: number | null | undefined): boolean {
-  const r = areaRatio(a, b);
-  return r != null && r > AREA_DISTINCT_RATIO;
+function spanOverlap(a: FrontWing, b: FrontWing): boolean {
+  if (a.span_mm == null || b.span_mm == null || a.span_mm <= 0 || b.span_mm <= 0) return true;
+  return Math.max(a.span_mm, b.span_mm) / Math.min(a.span_mm, b.span_mm) <= SPAN_OVERLAP_RATIO;
 }
 
 function frontTitleOf(f: FrontWing): string {
@@ -282,10 +322,147 @@ function tailTitleOf(t: TailWing): string {
   return `${t.familyOfficial} ${t.sizeLabel}`;
 }
 
+function overlapDiscs(doc: QuiverDoc): Discipline[] {
+  return doc.disciplines.length ? doc.disciplines : (["wing"] as Discipline[]);
+}
+
 function overlapContext(doc: QuiverDoc): string {
-  const discs = (doc.disciplines.length ? doc.disciplines : (["wing"] as Discipline[])).join(" / ");
+  const discs = overlapDiscs(doc).join(" / ");
   if (!doc.goal) return discs;
   return `${discs} · ${doc.goal.replace(/-/g, " ")}`;
+}
+
+function joinAnd(names: string[]): string {
+  if (names.length === 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function formatDiscList(discs: Discipline[]): string {
+  return joinAnd(discs);
+}
+
+function oppositeFrontJobs(a: Lane, b: Lane): boolean {
+  return (
+    (a === "carve" && b === "glide") ||
+    (a === "glide" && b === "carve") ||
+    (a === "surf" && b === "glide") ||
+    (a === "glide" && b === "surf")
+  );
+}
+
+/** Compatible when a selected discipline uses both shapes; carve vs high-glide never merge. */
+function lanesCompatibleForDiscs(a: Lane, b: Lane, discs: Discipline[]): boolean {
+  if (a === b) return true;
+  if (oppositeFrontJobs(a, b)) return false;
+  return discs.some((d) => WANT_LANES[d].includes(a) && WANT_LANES[d].includes(b));
+}
+
+function withFrontsRemoved(doc: QuiverDoc, dropIds: string[]): QuiverDoc {
+  const drop = new Set(dropIds);
+  return {
+    ...doc,
+    parts: {
+      ...doc.parts,
+      frontIds: doc.parts.frontIds.filter((id) => !drop.has(id)),
+    },
+  };
+}
+
+function withFrontReplaced(doc: QuiverDoc, fromId: string, toId: string): QuiverDoc {
+  return {
+    ...doc,
+    parts: {
+      ...doc.parts,
+      frontIds: doc.parts.frontIds.map((id) => (id === fromId ? toId : id)),
+    },
+  };
+}
+
+function withTailsRemoved(doc: QuiverDoc, dropIds: string[]): QuiverDoc {
+  const drop = new Set(dropIds);
+  return {
+    ...doc,
+    parts: {
+      ...doc.parts,
+      tailIds: doc.parts.tailIds.filter((id) => !drop.has(id)),
+    },
+  };
+}
+
+/** Disciplines whose front coverage is missing — same test as analyzeGaps. */
+function frontCoverageMissing(doc: QuiverDoc): Discipline[] {
+  const fronts = ownedFronts(doc);
+  const missing: Discipline[] = [];
+  for (const discipline of doc.disciplines) {
+    const lanes = WANT_LANES[discipline];
+    if (!fronts.length || !fronts.some((f) => lanes.includes(frontLane(f)))) {
+      missing.push(discipline);
+    }
+  }
+  return missing;
+}
+
+function gapFrontMissingCount(doc: QuiverDoc): number {
+  return frontCoverageMissing(doc).length;
+}
+
+function sellingWorsensFrontGaps(doc: QuiverDoc, dropIds: string[]): boolean {
+  if (!dropIds.length) return false;
+  const afterDoc = withFrontsRemoved(doc, dropIds);
+  if (gapFrontMissingCount(afterDoc) > gapFrontMissingCount(doc)) return true;
+  const beforeSet = new Set(frontCoverageMissing(doc));
+  return frontCoverageMissing(afterDoc).some((d) => !beforeSet.has(d));
+}
+
+function swapWorsensFrontGaps(doc: QuiverDoc, fromId: string, toId: string): boolean {
+  const afterDoc = withFrontReplaced(doc, fromId, toId);
+  if (gapFrontMissingCount(afterDoc) > gapFrontMissingCount(doc)) return true;
+  const beforeSet = new Set(frontCoverageMissing(doc));
+  return frontCoverageMissing(afterDoc).some((d) => !beforeSet.has(d));
+}
+
+function isTailGapText(text: string): boolean {
+  return /tail/i.test(text);
+}
+
+function gapTailMissingCount(doc: QuiverDoc): number {
+  return analyzeGaps(doc).reduce(
+    (n, g) => n + g.missing.filter(isTailGapText).length,
+    0,
+  );
+}
+
+function sellingWorsensTailGaps(doc: QuiverDoc, dropIds: string[]): boolean {
+  if (!dropIds.length) return false;
+  const before = gapTailMissingCount(doc);
+  const after = gapTailMissingCount(withTailsRemoved(doc, dropIds));
+  return after > before;
+}
+
+function uniqueCoveredDiscs(f: FrontWing, others: FrontWing[], doc: QuiverDoc): Discipline[] {
+  return overlapDiscs(doc).filter((d) => {
+    const lanes = WANT_LANES[d];
+    if (!lanes.includes(frontLane(f))) return false;
+    return !others.some((o) => lanes.includes(frontLane(o)));
+  });
+}
+
+function sameOverlapJob(a: FrontWing, b: FrontWing): boolean {
+  if (a.familyId === b.familyId) return true;
+  return frontLane(a) === frontLane(b);
+}
+
+function isTrueDuplicate(worse: FrontWing, better: FrontWing, doc: QuiverDoc): boolean {
+  const r = areaRatio(worse.area_cm2, better.area_cm2);
+  if (r == null) {
+    return !!doc.goal && frontGoalRetreats(better, worse, doc.goal);
+  }
+  if (r <= AREA_TIGHT_DUP_RATIO) return true;
+  if (r <= AREA_GOAL_DUP_RATIO && doc.goal && frontGoalRetreats(better, worse, doc.goal)) {
+    return true;
+  }
+  return false;
 }
 
 function rank01(value: number, lo: number, hi: number, preferHigh: boolean): number {
@@ -312,10 +489,13 @@ function clusterAreaArRange(cluster: FrontWing[]): {
 
 function scoreFrontOverlap(f: FrontWing, cluster: FrontWing[], doc: QuiverDoc): number {
   let s = 0;
-  const discs = doc.disciplines.length ? doc.disciplines : (["wing"] as Discipline[]);
+  const discs = overlapDiscs(doc);
   const lane = frontLane(f);
-  if (discs.some((d) => WANT_LANES[d].includes(lane))) s += 40;
+  const served = discs.filter((d) => WANT_LANES[d].includes(lane));
+  if (served.length) s += 40 + 16 * served.length;
   else s -= 35;
+
+  s += 5 * familyGeneration(f);
 
   const goal = doc.goal;
   if (goal) {
@@ -360,36 +540,21 @@ function scoreFrontOverlap(f: FrontWing, cluster: FrontWing[], doc: QuiverDoc): 
   return s;
 }
 
-function frontsServeDifferentRoles(a: FrontWing, b: FrontWing): boolean {
-  if (areasDistinct(a.area_cm2, b.area_cm2)) return true;
-  if (a.aspect_ratio != null && b.aspect_ratio != null && !sameArClass(a, b)) return true;
-  return false;
-}
-
-function similarCrossFamilyFronts(a: FrontWing, b: FrontWing): boolean {
+function shouldClusterFronts(a: FrontWing, b: FrontWing, discs: Discipline[]): boolean {
   if (a.id === b.id) return false;
+  if (a.familyId === b.familyId) return true;
   if (a.brand !== b.brand) return false;
-  if (frontLane(a) !== frontLane(b)) return false;
+  if (!lanesCompatibleForDiscs(frontLane(a), frontLane(b), discs)) return false;
   if (!areasOverlap(a.area_cm2, b.area_cm2)) return false;
+  if (!spanOverlap(a, b)) return false;
   if (a.aspect_ratio != null && b.aspect_ratio != null && !sameArClass(a, b)) return false;
   return true;
 }
 
-function clusterOwnedFronts(fronts: FrontWing[]): FrontWing[][] {
-  const byFam = new Map<string, FrontWing[]>();
-  for (const f of fronts) {
-    const g = byFam.get(f.familyId) ?? [];
-    g.push(f);
-    byFam.set(f.familyId, g);
-  }
-  const clusters: FrontWing[][] = [];
-  const leftover: FrontWing[] = [];
-  for (const g of byFam.values()) {
-    if (g.length >= 2) clusters.push(g);
-    else leftover.push(...g);
-  }
-  const n = leftover.length;
-  const parent = leftover.map((_, i) => i);
+function clusterOwnedFronts(fronts: FrontWing[], doc: QuiverDoc): FrontWing[][] {
+  const discs = overlapDiscs(doc);
+  const n = fronts.length;
+  const parent = fronts.map((_, i) => i);
   const find = (i: number): number => {
     let x = i;
     while (parent[x] !== x) {
@@ -405,20 +570,17 @@ function clusterOwnedFronts(fronts: FrontWing[]): FrontWing[][] {
   };
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      if (similarCrossFamilyFronts(leftover[i], leftover[j])) union(i, j);
+      if (shouldClusterFronts(fronts[i], fronts[j], discs)) union(i, j);
     }
   }
   const groups = new Map<number, FrontWing[]>();
   for (let i = 0; i < n; i++) {
     const r = find(i);
     const g = groups.get(r) ?? [];
-    g.push(leftover[i]);
+    g.push(fronts[i]);
     groups.set(r, g);
   }
-  for (const g of groups.values()) {
-    if (g.length >= 2) clusters.push(g);
-  }
-  return clusters;
+  return [...groups.values()].filter((g) => g.length >= 2);
 }
 
 function closestKeepFront(sell: FrontWing, keeps: FrontWing[]): FrontWing {
@@ -436,78 +598,242 @@ function closestKeepFront(sell: FrontWing, keeps: FrontWing[]): FrontWing {
   return best;
 }
 
+function keepFitContext(keep: FrontWing, doc: QuiverDoc): string {
+  const discs = uniqueCoveredDiscs(keep, [], doc);
+  const discBit = discs.length ? formatDiscList(discs) : overlapDiscs(doc).join(" / ");
+  if (!doc.goal) return discBit;
+  return `${discBit} · ${doc.goal.replace(/-/g, " ")}`;
+}
+
 function frontSellReason(sell: FrontWing, keep: FrontWing, doc: QuiverDoc): string {
-  const ctx = overlapContext(doc);
   const keepName = keep.sizeLabel;
-  const goal = doc.goal;
-  const sr = areaRatio(sell.area_cm2, keep.area_cm2);
-  let sizeTip: string | null = null;
-  if (sell.area_cm2 != null && keep.area_cm2 != null && sr != null && sr >= 1.04) {
-    sizeTip = sell.area_cm2 > keep.area_cm2 ? "keep the smaller option" : "keep the larger option";
+  const ctx = keepFitContext(keep, doc);
+  if (!frontFitsDisciplines(sell, overlapDiscs(doc)) && frontFitsDisciplines(keep, overlapDiscs(doc))) {
+    return `${keepName} already matches ${ctx} — this one does not.`;
   }
-  let arTip: string | null = null;
-  if (sell.aspect_ratio != null && keep.aspect_ratio != null) {
-    const d = keep.aspect_ratio - sell.aspect_ratio;
-    if (d > 0.25) arTip = "keep the higher-AR option";
-    else if (d < -0.25) arTip = "keep the lower-AR option";
+  if (familyGeneration(keep) > familyGeneration(sell)) {
+    return `${keepName} is the newer line for ${ctx} — this one does the same job.`;
   }
-
-  let tip: string | null = null;
-  if (goal === "more-speed" || goal === "smaller-size") {
-    tip = sizeTip === "keep the smaller option" ? sizeTip : (arTip ?? sizeTip);
-  } else if (goal === "more-lift") {
-    tip = sizeTip === "keep the larger option" ? sizeTip : (sizeTip ?? arTip);
-  } else if (goal === "more-glide") {
-    tip = arTip === "keep the higher-AR option" ? arTip : (arTip ?? sizeTip);
-  } else if (goal === "tighter-turns") {
-    tip = arTip === "keep the lower-AR option" ? arTip : (arTip ?? sizeTip);
-  } else {
-    tip = sizeTip ?? arTip;
+  if (sell.area_cm2 != null && keep.area_cm2 != null) {
+    if (sell.area_cm2 > keep.area_cm2 * 1.04) {
+      return `${keepName} already covers ${ctx} at a similar size — this larger one is extra.`;
+    }
+    if (sell.area_cm2 < keep.area_cm2 * 0.96) {
+      return `${keepName} already covers ${ctx} at a similar size — this smaller one is extra.`;
+    }
   }
-
-  if (!frontFitsDisciplines(sell, doc.disciplines) && frontFitsDisciplines(keep, doc.disciplines)) {
-    return `Overlaps your ${keepName} for ${ctx} — keep the shape that matches`;
-  }
-  if (tip) return `Overlaps your ${keepName} for ${ctx} — ${tip}`;
-  return `Overlaps your ${keepName} for ${ctx} — keep the better fit`;
+  return `${keepName} already covers ${ctx} — this one does the same job.`;
 }
 
 function splitFrontCluster(
   fronts: FrontWing[],
   doc: QuiverDoc,
-): { keep: FrontWing[]; sell: { wing: FrontWing; keep: FrontWing }[] } {
+  alreadySold: string[],
+): {
+  keep: { wing: FrontWing; note?: string }[];
+  sell: { wing: FrontWing; keep: FrontWing }[];
+} {
   const scored = fronts.map((f) => ({ f, score: scoreFrontOverlap(f, fronts, doc) }));
   scored.sort((a, b) => b.score - a.score || a.f.id.localeCompare(b.f.id));
   const keep: FrontWing[] = [];
+  const keepNotes = new Map<string, string>();
   const sell: { wing: FrontWing; keep: FrontWing }[] = [];
+
   for (const row of scored) {
+    const f = row.f;
     if (!keep.length) {
-      keep.push(row.f);
+      keep.push(f);
       continue;
     }
-    const fits = frontFitsDisciplines(row.f, doc.disciplines);
-    const different = keep.every((k) => frontsServeDifferentRoles(k, row.f));
-    if (keep.length < 2 && fits && different) {
-      keep.push(row.f);
+
+    const unique = uniqueCoveredDiscs(f, keep, doc);
+    if (unique.length) {
+      keep.push(f);
+      keepNotes.set(f.id, `covers ${formatDiscList(unique)}`);
       continue;
     }
-    sell.push({ wing: row.f, keep: closestKeepFront(row.f, keep) });
+
+    const dupKeeps = keep.filter((k) => sameOverlapJob(f, k) && isTrueDuplicate(f, k, doc));
+    if (dupKeeps.length) {
+      const dupKeep = closestKeepFront(f, dupKeeps);
+      const tentative = [...alreadySold, ...sell.map((s) => s.wing.id), f.id];
+      if (sellingWorsensFrontGaps(doc, tentative)) {
+        keep.push(f);
+        const cover = uniqueCoveredDiscs(f, keep.filter((k) => k.id !== f.id), doc);
+        keepNotes.set(
+          f.id,
+          cover.length ? `keep so ${formatDiscList(cover)} stays covered` : "keep so coverage stays complete",
+        );
+        continue;
+      }
+      sell.push({ wing: f, keep: dupKeep });
+      continue;
+    }
+
+    keep.push(f);
   }
-  return { keep, sell };
+
+  return {
+    keep: keep.map((wing) => ({ wing, note: keepNotes.get(wing.id) })),
+    sell,
+  };
+}
+
+function findTradeTarget(from: FrontWing, keeps: FrontWing[], doc: QuiverDoc): FrontWing | null {
+  const others = keeps.filter((k) => k.id !== from.id);
+  const owned = new Set(doc.parts.frontIds);
+  const pool = catalog.fronts.filter(
+    (f) => f.brand === from.brand && f.familyId === from.familyId && !owned.has(f.id),
+  );
+  const fromDiscs = uniqueCoveredDiscs(from, [], doc);
+  const scored: { f: FrontWing; s: number }[] = [];
+
+  for (const f of pool) {
+    if (swapWorsensFrontGaps(doc, from.id, f.id)) continue;
+    if (fromDiscs.some((d) => !WANT_LANES[d].includes(frontLane(f)))) continue;
+    if (others.some((k) => sameOverlapJob(f, k) && isTrueDuplicate(f, k, doc))) continue;
+
+    let distinctGain = 0;
+    for (const k of others) {
+      const oldR = areaRatio(from.area_cm2, k.area_cm2) ?? 1;
+      const newR = areaRatio(f.area_cm2, k.area_cm2) ?? 1;
+      distinctGain += newR - oldR;
+    }
+    if (others.length && distinctGain <= 0.04) continue;
+
+    if (doc.goal && frontGoalRetreats(from, f, doc.goal)) continue;
+
+    let s = 20 * distinctGain;
+    if (doc.goal && frontGoalRetreats(f, from, doc.goal)) s += 15;
+    const step = areaRatio(from.area_cm2, f.area_cm2);
+    if (step != null) {
+      if (step >= 1.2 && step <= 1.5) s += 8;
+      if (step > 1.55) s -= 8;
+      if (step > 1.7) s -= 8;
+      if (step > 1.8) s -= 10;
+    }
+    scored.push({ f, s });
+  }
+
+  scored.sort((a, b) => b.s - a.s || a.f.id.localeCompare(b.f.id));
+  return scored[0]?.f ?? null;
+}
+
+function isBestKeptInFamily(
+  from: FrontWing,
+  keep: FrontWing[],
+  cluster: FrontWing[],
+  doc: QuiverDoc,
+): boolean {
+  const sibs = keep.filter((k) => k.familyId === from.familyId);
+  if (sibs.length < 2) return false;
+  const best = [...sibs].sort(
+    (a, b) =>
+      scoreFrontOverlap(b, cluster, doc) - scoreFrontOverlap(a, cluster, doc) ||
+      a.id.localeCompare(b.id),
+  )[0];
+  return best?.id === from.id;
+}
+
+function shouldSuggestTweak(
+  from: FrontWing,
+  keep: FrontWing[],
+  cluster: FrontWing[],
+  doc: QuiverDoc,
+): boolean {
+  if (isBestKeptInFamily(from, keep, cluster, doc)) return false;
+  const unique = uniqueCoveredDiscs(
+    from,
+    keep.filter((k) => k.id !== from.id),
+    doc,
+  );
+  if (unique.length) return false;
+  for (const k of keep) {
+    if (k.id === from.id) continue;
+    const r = areaRatio(from.area_cm2, k.area_cm2);
+    if (r == null || r > AREA_BUNCH_RATIO) continue;
+    if (doc.goal && frontGoalRetreats(k, from, doc.goal)) return true;
+    if (
+      k.familyId !== from.familyId &&
+      from.area_cm2 != null &&
+      k.area_cm2 != null &&
+      from.area_cm2 >= k.area_cm2
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function tweakSuggestion(from: FrontWing, toward: FrontWing, keep: FrontWing[], doc: QuiverDoc): string {
+  const ctx = overlapContext(doc);
+  const fromName = frontTitleOf(from);
+  const towardName = frontTitleOf(toward);
+  const others = keep.filter((k) => k.id !== from.id).map((k) => frontTitleOf(k));
+  const covers = uniqueCoveredDiscs(from, [], doc);
+  let sizeBit = " a different size";
+  if (from.area_cm2 != null && toward.area_cm2 != null) {
+    if (toward.area_cm2 < from.area_cm2 * 0.96) sizeBit = " a smaller size";
+    else if (toward.area_cm2 > from.area_cm2 * 1.04) sizeBit = " a larger size";
+  }
+  const stepBit = others.length ? ` so sizes step apart from ${joinAnd(others)}` : "";
+  const coverBit = covers.length ? ` It still covers ${formatDiscList(covers)}.` : "";
+  return `Consider trading ${fromName} toward ${towardName} —${sizeBit} for ${ctx}${stepBit}.${coverBit}`;
+}
+
+function buildFrontTweaks(
+  keepWings: FrontWing[],
+  cluster: FrontWing[],
+  doc: QuiverDoc,
+): QuiverOverlapTweak[] {
+  if (keepWings.length < 2) return [];
+  const ranked = [...keepWings].sort((a, b) => {
+    const aPri = shouldSuggestTweak(a, keepWings, cluster, doc) ? 1 : 0;
+    const bPri = shouldSuggestTweak(b, keepWings, cluster, doc) ? 1 : 0;
+    if (aPri !== bPri) return bPri - aPri;
+    return scoreFrontOverlap(a, cluster, doc) - scoreFrontOverlap(b, cluster, doc);
+  });
+  const tweaks: QuiverOverlapTweak[] = [];
+  for (const from of ranked) {
+    if (tweaks.length >= 2) break;
+    if (!shouldSuggestTweak(from, keepWings, cluster, doc)) continue;
+    const toward = findTradeTarget(from, keepWings, doc);
+    if (!toward) continue;
+    tweaks.push({
+      fromPartId: from.id,
+      fromTitle: frontTitleOf(from),
+      kind: "front",
+      suggestion: tweakSuggestion(from, toward, keepWings, doc),
+      towardPartId: toward.id,
+      towardTitle: frontTitleOf(toward),
+    });
+  }
+  return tweaks;
 }
 
 function frontClusterLabel(fronts: FrontWing[]): string {
   const fams = [...new Set(fronts.map((f) => f.familyOfficial))];
   if (fams.length === 1 && fams[0]) return fams[0];
+  if (fams.length === 2) return `${fams[0]} and ${fams[1]}`;
   return "similar-size fronts";
 }
 
-function toFrontOverlapCluster(fronts: FrontWing[], doc: QuiverDoc): QuiverOverlapCluster | null {
-  const { keep, sell } = splitFrontCluster(fronts, doc);
-  if (!sell.length) return null;
+function toFrontOverlapCluster(
+  fronts: FrontWing[],
+  doc: QuiverDoc,
+  alreadySold: string[],
+): QuiverOverlapCluster | null {
+  const { keep, sell } = splitFrontCluster(fronts, doc, alreadySold);
+  const keepWings = keep.map((k) => k.wing);
+  const tweaks = buildFrontTweaks(keepWings, fronts, doc);
+  if (!sell.length && !tweaks.length) return null;
   return {
     label: frontClusterLabel(fronts),
-    keep: keep.map((f) => ({ partId: f.id, title: frontTitleOf(f) })),
+    keep: keep.map((k) => ({
+      partId: k.wing.id,
+      title: frontTitleOf(k.wing),
+      note: k.note,
+    })),
     sell: sell.map((s) => ({
       partId: s.wing.id,
       kind: "front" as const,
@@ -516,6 +842,7 @@ function toFrontOverlapCluster(fronts: FrontWing[], doc: QuiverDoc): QuiverOverl
       keepId: s.keep.id,
       keepTitle: frontTitleOf(s.keep),
     })),
+    tweaks,
   };
 }
 
@@ -548,12 +875,15 @@ function scoreTailOverlap(t: TailWing, cluster: TailWing[], doc: QuiverDoc): num
 function tailSellReason(sell: TailWing, keep: TailWing, doc: QuiverDoc): string {
   const ctx = overlapContext(doc);
   const keepName = keep.sizeLabel;
-  let tip = "keep the better fit";
   if (sell.area_cm2 != null && keep.area_cm2 != null) {
-    if (sell.area_cm2 > keep.area_cm2 * 1.04) tip = "keep the smaller option";
-    else if (sell.area_cm2 < keep.area_cm2 * 0.96) tip = "keep the larger option";
+    if (sell.area_cm2 > keep.area_cm2 * 1.04) {
+      return `${keepName} already covers ${ctx} at a similar size — this larger one is extra.`;
+    }
+    if (sell.area_cm2 < keep.area_cm2 * 0.96) {
+      return `${keepName} already covers ${ctx} at a similar size — this smaller one is extra.`;
+    }
   }
-  return `Overlaps your ${keepName} for ${ctx} — ${tip}`;
+  return `${keepName} already covers ${ctx} — this one does the same job.`;
 }
 
 function clusterOwnedTails(tails: TailWing[]): TailWing[][] {
@@ -582,7 +912,11 @@ function toTailOverlapCluster(tails: TailWing[], doc: QuiverDoc): QuiverOverlapC
   scored.sort((a, b) => b.score - a.score || a.t.id.localeCompare(b.t.id));
   const keep = scored[0]?.t;
   if (!keep) return null;
-  const sell = scored.slice(1).map((row) => row.t);
+  const sell: TailWing[] = [];
+  for (const row of scored.slice(1)) {
+    if (sellingWorsensTailGaps(doc, [...sell.map((t) => t.id), row.t.id])) continue;
+    sell.push(row.t);
+  }
   if (!sell.length) return null;
   const fams = [...new Set(tails.map((t) => t.familyOfficial))];
   const label = fams.length === 1 && fams[0] ? fams[0] : "similar tails";
@@ -597,20 +931,43 @@ function toTailOverlapCluster(tails: TailWing[], doc: QuiverDoc): QuiverOverlapC
       keepId: keep.id,
       keepTitle: tailTitleOf(keep),
     })),
+    tweaks: [],
   };
 }
 
 export function analyzeOverlaps(doc: QuiverDoc): QuiverOverlapCluster[] {
   const out: QuiverOverlapCluster[] = [];
-  for (const g of clusterOwnedFronts(ownedFronts(doc))) {
-    const c = toFrontOverlapCluster(g, doc);
-    if (c) out.push(c);
+  const soldFronts: string[] = [];
+  for (const g of clusterOwnedFronts(ownedFronts(doc), doc)) {
+    const c = toFrontOverlapCluster(g, doc, soldFronts);
+    if (!c) continue;
+    soldFronts.push(...c.sell.filter((s) => s.kind === "front").map((s) => s.partId));
+    out.push(c);
   }
+  while (soldFronts.length && sellingWorsensFrontGaps(doc, soldFronts)) {
+    const rescueId = soldFronts.pop();
+    if (!rescueId) break;
+    for (const c of out) {
+      const idx = c.sell.findIndex((s) => s.kind === "front" && s.partId === rescueId);
+      if (idx < 0) continue;
+      const [row] = c.sell.splice(idx, 1);
+      if (row && !c.keep.some((k) => k.partId === row.partId)) {
+        c.keep.push({
+          partId: row.partId,
+          title: row.title,
+          note: "keep so coverage stays complete",
+        });
+      }
+      break;
+    }
+  }
+  const fronts = out.filter((c) => c.sell.length || c.tweaks.length);
+  const tails: QuiverOverlapCluster[] = [];
   for (const g of clusterOwnedTails(ownedTails(doc))) {
     const c = toTailOverlapCluster(g, doc);
-    if (c) out.push(c);
+    if (c) tails.push(c);
   }
-  return out;
+  return [...fronts, ...tails];
 }
 
 export type BuyRec = {
