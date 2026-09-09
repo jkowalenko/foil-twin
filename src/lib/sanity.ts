@@ -19,12 +19,13 @@ import type { RiderLevel } from "../data/types";
 import {
   FRONT_OVERLAP_MIN,
   analyzeGaps,
+  analyzeOverlaps,
   brandConvert,
   newNamedSetup,
   recommendBuys,
   upsertNamedSetup,
 } from "./quiver";
-import { DEFAULT_QUIVER_UI, parseQuiverUi } from "./quiverUi";
+import { DEFAULT_QUIVER_UI, parseQuiverUi, saveQuiverUi } from "./quiverUi";
 import { MAST_FAMILY_TWIN, twinMastFamily } from "./mastFamilies";
 import {
   FX_USD_TO_CAD,
@@ -788,6 +789,7 @@ const uiDefault = parseQuiverUi(null);
 if (
   uiDefault.version !== 1 ||
   uiDefault.sections.gaps !== true ||
+  uiDefault.sections.overlaps !== true ||
   uiDefault.sections.nextToBuy !== true ||
   uiDefault.sections.brandConvert !== false ||
   uiDefault.sections.kit80 !== true ||
@@ -800,6 +802,7 @@ if (
 }
 if (
   DEFAULT_QUIVER_UI.sections.gaps !== true ||
+  DEFAULT_QUIVER_UI.sections.overlaps !== true ||
   DEFAULT_QUIVER_UI.sections.nextToBuy !== true ||
   DEFAULT_QUIVER_UI.sections.brandConvert !== false ||
   DEFAULT_QUIVER_UI.sections.kit80 !== true ||
@@ -809,13 +812,14 @@ if (
   DEFAULT_QUIVER_UI.currency !== "USD"
 ) {
   throw new Error(
-    "DEFAULT_QUIVER_UI: gaps/nextToBuy/kit80/kit90/convertInclude open; brandConvert/convertMatches closed; currency USD",
+    "DEFAULT_QUIVER_UI: gaps/overlaps/nextToBuy/kit80/kit90/convertInclude open; brandConvert/convertMatches closed; currency USD",
   );
 }
 const uiOn = parseQuiverUi({
   version: 1,
   sections: {
     gaps: false,
+    overlaps: false,
     nextToBuy: true,
     brandConvert: true,
     kit80: false,
@@ -827,6 +831,7 @@ const uiOn = parseQuiverUi({
 });
 if (
   uiOn.sections.gaps !== false ||
+  uiOn.sections.overlaps !== false ||
   uiOn.sections.brandConvert !== true ||
   uiOn.sections.kit80 !== false ||
   uiOn.sections.kit90 !== true ||
@@ -849,9 +854,13 @@ if (uiLegacy.sections.kit80 !== true || uiLegacy.sections.kit90 !== true) {
 if (uiLegacy.sections.convertInclude !== true || uiLegacy.sections.convertMatches !== false) {
   throw new Error("legacy prefs must default convertInclude open and convertMatches collapsed");
 }
+if (uiLegacy.sections.overlaps !== true) {
+  throw new Error("legacy prefs without overlaps must default the Overlaps panel open");
+}
 const uiJunk = parseQuiverUi({ version: 1, owner: null, parts: { frontIds: [] } });
 if (
   uiJunk.sections.gaps !== true ||
+  uiJunk.sections.overlaps !== true ||
   uiJunk.sections.nextToBuy !== true ||
   uiJunk.sections.brandConvert !== false ||
   uiJunk.sections.kit80 !== true ||
@@ -862,8 +871,23 @@ if (
 ) {
   throw new Error("inventory-shaped blobs must not parse as UI prefs");
 }
+const uiSaved = saveQuiverUi({
+  version: 1,
+  sections: {
+    ...DEFAULT_QUIVER_UI.sections,
+    overlaps: false,
+  },
+  currency: "CAD",
+});
+if (uiSaved.sections.overlaps !== false || uiSaved.currency !== "CAD") {
+  throw new Error(`saveQuiverUi did not persist overlaps/currency: ${JSON.stringify(uiSaved)}`);
+}
+const uiSavedRoundTrip = parseQuiverUi(uiSaved);
+if (uiSavedRoundTrip.sections.overlaps !== false || uiSavedRoundTrip.currency !== "CAD") {
+  throw new Error("saved prefs must round-trip overlaps closed and CAD");
+}
 console.log(
-  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed kits open convertInclude open convertMatches collapsed currency=${uiDefault.currency}`,
+  `prefs key=${QUIVER_UI_STORAGE_KEY} inventory=${QUIVER_STORAGE_KEY} default convert collapsed kits open overlaps open convertInclude open convertMatches collapsed currency=${uiDefault.currency}`,
 );
 
 section("Manufacturer + dealer prices");
@@ -958,6 +982,120 @@ if (race.missing.some((m) => /You own /.test(m))) {
   throw new Error(`race missing text listed inventory: ${race.missing.join(" | ")}`);
 }
 console.log(`race gaps (${race.missing.length}): ${race.missing.join(" | ")}`);
+
+section("Quiver overlaps sell/drop");
+const jargon = /greedy|set-cover|heuristic|lane|AR class|WANT_LANES/i;
+function assertOverlapCopy(label: string, clusters: ReturnType<typeof analyzeOverlaps>) {
+  const blob = clusters
+    .flatMap((c) => [c.label, ...c.keep.map((k) => k.title), ...c.sell.map((s) => `${s.title} ${s.reason}`)])
+    .join("\n");
+  if (jargon.test(blob)) {
+    throw new Error(`${label}: overlap copy has heuristic jargon:\n${blob}`);
+  }
+}
+
+const speedOverlap = analyzeOverlaps(
+  quiverDoc({
+    disciplines: ["wing"],
+    goal: "more-speed",
+    parts: {
+      mastIds: [],
+      fuseIds: [],
+      frontIds: ["code-s-850", "code-s-980"],
+      tailIds: [],
+    },
+  }),
+);
+if (!speedOverlap.length) {
+  throw new Error("code-s-850 + code-s-980 for wing · more speed should flag an overlap");
+}
+const speedSells = speedOverlap.flatMap((c) => c.sell);
+const speedKeeps = speedOverlap.flatMap((c) => c.keep);
+if (!speedSells.some((s) => s.partId === "code-s-980" && s.kind === "front")) {
+  throw new Error(
+    `expected to sell code-s-980 (larger sibling), got ${speedSells.map((s) => s.partId).join(", ") || "(none)"}`,
+  );
+}
+if (speedSells.some((s) => s.partId === "code-s-850")) {
+  throw new Error("should keep code-s-850 for more speed, not sell it");
+}
+if (!speedKeeps.some((k) => k.partId === "code-s-850")) {
+  throw new Error(
+    `expected to keep code-s-850, got ${speedKeeps.map((k) => k.partId).join(", ") || "(none)"}`,
+  );
+}
+const sell980 = speedSells.find((s) => s.partId === "code-s-980")!;
+if (sell980.keepId !== "code-s-850") {
+  throw new Error(`code-s-980 should name 850S as keep, got ${sell980.keepId}`);
+}
+if (!/850S/.test(sell980.reason) || !/more speed/.test(sell980.reason)) {
+  throw new Error(`sell reason should name 850S and more speed, got: ${sell980.reason}`);
+}
+assertOverlapCopy("code S speed overlap", speedOverlap);
+
+const artOverlap = analyzeOverlaps(
+  quiverDoc({
+    disciplines: ["wing"],
+    goal: "more-speed",
+    parts: {
+      mastIds: [],
+      fuseIds: [],
+      frontIds: ["axis-artv2-879", "axis-artv2-939"],
+      tailIds: [],
+    },
+  }),
+);
+const artSells = artOverlap.flatMap((c) => c.sell);
+const artKeeps = artOverlap.flatMap((c) => c.keep);
+if (!artSells.some((s) => s.partId === "axis-artv2-939")) {
+  throw new Error(
+    `ART v2 939 should be a sell vs 879 for more speed, got ${artSells.map((s) => s.partId).join(", ") || "(none)"}`,
+  );
+}
+if (!artKeeps.some((k) => k.partId === "axis-artv2-879") || artSells.some((s) => s.partId === "axis-artv2-879")) {
+  throw new Error("ART v2 879 should be the keep for more speed");
+}
+assertOverlapCopy("ART v2 speed overlap", artOverlap);
+
+const leanSingle = analyzeOverlaps(
+  quiverDoc({
+    disciplines: ["wing"],
+    goal: "more-speed",
+    parts: {
+      mastIds: [],
+      fuseIds: [],
+      frontIds: ["code-s-850"],
+      tailIds: [],
+    },
+  }),
+);
+if (leanSingle.length) {
+  throw new Error(`single well-fitting front should have no overlaps, got ${JSON.stringify(leanSingle)}`);
+}
+
+const leanLanes = analyzeOverlaps(
+  quiverDoc({
+    disciplines: ["wing"],
+    goal: "more-speed",
+    parts: {
+      mastIds: [],
+      fuseIds: [],
+      frontIds: ["code-s-850", "code-r-860"],
+      tailIds: [],
+    },
+  }),
+);
+if (leanLanes.length) {
+  throw new Error(
+    `surf-shaped S and glide-shaped R should not cluster, got ${JSON.stringify(leanLanes)}`,
+  );
+}
+if (jargon.test(JSON.stringify(leanLanes))) {
+  throw new Error("lean overlap payload still has jargon");
+}
+console.log(
+  `overlaps: sell ${sell980.partId} keep ${sell980.keepId}; ART sell ${artSells.map((s) => s.partId).join(",")}; lean empty`,
+);
 
 section("Mast family twin map");
 const expectPairs: [string, string][] = [

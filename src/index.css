@@ -1109,6 +1109,9 @@ input:focus-visible {
 .convert-checks input {
   margin: 0;
 }
+.overlap-cluster .overlap-list {
+  margin: 8px 0 0;
+}
 .overlap-list {
   margin: 12px 0 4px;
 }
@@ -1124,6 +1127,17 @@ input:focus-visible {
   margin-bottom: 8px;
   font-size: 13px;
   line-height: 1.45;
+}
+.overlap-card:last-child {
+  margin-bottom: 0;
+}
+.sell-tag {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hot);
+  font-weight: 700;
+  margin-right: 6px;
 }
 .savings,
 .save-pill {

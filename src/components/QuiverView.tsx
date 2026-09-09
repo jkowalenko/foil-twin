@@ -13,6 +13,7 @@ import { FX_DATE, FX_USD_TO_CAD, KITESOURCE_RETRIEVED, PRICE_RETRIEVED, hasKites
 import { brandMod, brandName, formatMoney, otherBrand, otherBrands } from "../lib/format";
 import {
   analyzeGaps,
+  analyzeOverlaps,
   brandConvert,
   listOwnedConvertParts,
   loadQuiver,
@@ -80,6 +81,7 @@ export function QuiverView({ onAdopt }: Props) {
   }
 
   const gaps = useMemo(() => analyzeGaps(doc), [doc]);
+  const overlapClusters = useMemo(() => analyzeOverlaps(doc), [doc]);
   const recs = useMemo(() => recommendBuys(doc), [doc]);
   const ownedConvert = useMemo(() => listOwnedConvertParts(doc), [doc]);
   const convert = useMemo(() => {
@@ -388,6 +390,49 @@ export function QuiverView({ onAdopt }: Props) {
                   ))}
                 </ul>
               )}
+            </div>
+          ))}
+        </CollapsiblePanel>
+
+        <CollapsiblePanel
+          id="overlaps"
+          label="Overlaps"
+          title="Overlaps"
+          sub="Same-job parts you could sell or drop for these goals"
+          open={ui.sections.overlaps}
+          onToggle={() => toggleSection("overlaps")}
+        >
+          {overlapClusters.length === 0 && (
+            <p className="empty-state">
+              No clear overlaps — your quiver looks lean for these goals.
+            </p>
+          )}
+          {overlapClusters.map((c) => (
+            <div
+              key={`${c.label}-${c.keep.map((k) => k.partId).join("-")}-${c.sell.map((s) => s.partId).join("-")}`}
+              className="gap-block overlap-cluster"
+            >
+              <h3>{c.label}</h3>
+              {c.keep.length > 0 && (
+                <p className="note ok-note">
+                  Keep {c.keep.map((k) => k.title).join(" · ")}
+                </p>
+              )}
+              <div className="overlap-list">
+                {c.sell.map((s) => (
+                  <div key={s.partId} className="overlap-card">
+                    <div className="twin-top">
+                      <strong>
+                        <span className="sell-tag">sell</span>
+                        {s.title}
+                      </strong>
+                    </div>
+                    <p className="note" style={{ marginTop: 6 }}>
+                      {s.reason}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </CollapsiblePanel>

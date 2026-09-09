@@ -5,6 +5,7 @@ export type QuiverUiPrefs = {
   version: 1;
   sections: {
     gaps: boolean;
+    overlaps: boolean;
     nextToBuy: boolean;
     brandConvert: boolean;
     /** Simplified kit (80%) panel open */
@@ -23,6 +24,7 @@ export const DEFAULT_QUIVER_UI: QuiverUiPrefs = {
   version: 1,
   sections: {
     gaps: true,
+    overlaps: true,
     nextToBuy: true,
     brandConvert: false,
     kit80: true,
@@ -61,6 +63,7 @@ export function parseQuiverUi(raw: unknown): QuiverUiPrefs {
     version: 1,
     sections: {
       gaps: parseBool(s.gaps, DEFAULT_QUIVER_UI.sections.gaps),
+      overlaps: parseBool(s.overlaps, DEFAULT_QUIVER_UI.sections.overlaps),
       nextToBuy: parseBool(s.nextToBuy, DEFAULT_QUIVER_UI.sections.nextToBuy),
       brandConvert: parseBool(s.brandConvert, DEFAULT_QUIVER_UI.sections.brandConvert),
       kit80: parseBool(s.kit80, DEFAULT_QUIVER_UI.sections.kit80),
@@ -87,6 +90,7 @@ export function saveQuiverUi(prefs: QuiverUiPrefs) {
     version: 1,
     sections: {
       gaps: !!prefs.sections.gaps,
+      overlaps: !!prefs.sections.overlaps,
       nextToBuy: !!prefs.sections.nextToBuy,
       brandConvert: !!prefs.sections.brandConvert,
       kit80: !!prefs.sections.kit80,
